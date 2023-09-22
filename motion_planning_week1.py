@@ -10,6 +10,19 @@ Task:
 Hint:
 - Obstacle and robot positions are parameters. Depending on state, set params, solve from there.
 - Input: current state / position; Change: Find what obstacles are in view with limited horizon.
+
+For simulation (next week):
+- Define step function (input: control object) -> (return: new state / trajectory)
+  - Adds every calculated state to array of states in robot object
+- Define environment class with global obstacles, walls of room
+  - Make a memory array containing solutions to 100+ simulations
+    - Fixed obstacles and goal position, but randomized starting states
+- Implement changes to motion_planning from sid's file
+  - new state, (unchanging) goal, and newly detected obstacles are CVXPY parameters
+  - these parameter.value get changed every timestep before problem.solve() is called
+- *** Also, in Robot.detect_obs() see if after multiple timesteps / detection cycles
+  - Is there a risk of obstacles being added to the list of local_obs multiple times?
+  - What about slices / parts of obstacles? Do we need to check for overlaps?
 """
 class Obstacle_Map:
     """
