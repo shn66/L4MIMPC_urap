@@ -10,6 +10,22 @@ Task:
 Hint:
 - Obstacle and robot positions are parameters. Depending on state, set params, solve from there.
 - Input: current state / position; Change: Find what obstacles are in view with limited horizon.
+
+For simulation (next week):
+- Define step function (input: control object) -> (return: new state / trajectory)
+  - Adds every calculated state to array of states in robot object
+
+- Define environment class with global obstacles, walls of room
+  - Make a memory array containing solutions to 100+ simulations
+    - Fixed obstacles and goal position, but randomized starting states
+
+- Implement changes to motion_planning from sid's file
+  - new state, (unchanging) goal, and newly detected obstacles are CVXPY parameters
+  - these parameter.value get changed every timestep before problem.solve() is called
+
+>>> Also, in Robot.detect_obs() see if after multiple timesteps / detection cycles
+  - Is there a risk of obstacles being added to the list of local_obs multiple times?
+  - What about slices / parts of obstacles? Do we need to check for overlaps?
 """
 class Obstacle_Map:
     """
@@ -225,22 +241,21 @@ state, input, boxes_low, boxes_upp = vars
 state0, goal = params
 
 ## Instantiate with an initial and goal condition
-state_list= [i+ np.array([0.1 0.1, 0. 0.]) for i in range(10)]
+state_list = [i + np.array([0.1, 0.1, 0.0, 0.0]) for i in range(10)]
 
 while not reached_goal:
-    state0.value=robot.traj[-1]
-    gaol.value= np.array([0.0,  0.0, 0.0 ,0.0])
-    robot.detect_obs()
-# state0.value = np.array([10.0, 0.0, 0.0, 0.0])
-# goal.value   = np.array([0.0,  0.0, 0.0 ,0.0])
 
+    # state0.value = np.array([10.0, 0.0, 0.0, 0.0])
+    # goal.value   = np.array([0.0,  0.0, 0.0 ,0.0])
+    state0.value = robot.traj[-1]
+    goal.value = np.array([0.0, 0.0, 0.0 ,0.0])
+
+    robot.detect_obs()
     problem.solve(verbose=False)
 
     print("Status: ", problem.status)
     print("Optimal cost: ", problem.value)
     print("Solve time (seconds): ", problem.solver_stats.solve_time)
-
-    
 
     # Finally, collect the optimized trajectory
     x_sol = state.value
@@ -248,10 +263,8 @@ while not reached_goal:
     bl_sol = [boxes_low[i].value for i in range(num_obs)]
     bu_sol = [boxes_upp[i].value for i in range(num_obs)]
 
-    control=u_sol[0]
-
+    control = u_sol[0]
     robot.step(control)
-
 
 ## Plot motion planning problem with matplotlib
 
@@ -259,7 +272,7 @@ figure = plt.figure()
 plt.gca().add_patch(Rectangle((-1, -5), 11, 10, linewidth=5.0, ec='g', fc='w', alpha=0.2, label="boundary"))
 
 plt.plot(x_sol[0, :], x_sol[1, :], 'o', label="trajectory")
-plt.plot(0.0, 0.0, '*', linewidth=10, label="goal")
+plt.plot(1.0, 0.0, '*', linewidth=10, label="goal")
 
 for i in range(num_obs):
     if i == 0:
