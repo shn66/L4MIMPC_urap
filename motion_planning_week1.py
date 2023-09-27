@@ -46,22 +46,12 @@ class Robot:
     Assume FOV is rectangle that spans x = 10 units ahead of robot, and spans all y coordinates.
     Prototype solution. Modify for circular FOV, x and y dependency, and line of sight blocking.
     """
-
-    # Track all states of robot throughout motion planning problem as accumulated memory
-    # TODO: keep track of positions, trajectories, basically maintain states and inputs
-
     def __init__(self, state, global_obs, FOV):
         self.x = state[0]   # modified during iterations
         self.FOV = FOV      # field of view (range in x)
 
         self.local_obs = Obstacle_Map([[], []], [[], []])
         self.global_obs = global_obs # also Obstacle_Map
-
-        print(f"\nDEBUG: Robot.init() done.")
-        print(f"Robot.FOV: x = {self.FOV} ahead.")
-        print(f"\nglobal_obs passed in:\n{self.global_obs}")
-    
-    # TODO: add a function that takes control as an argument and updates robot's state
 
     def detect_obs(self):
         lower_arr, size_arr = self.global_obs.unwrap("x") # global x arrs
@@ -87,8 +77,6 @@ class Robot:
                 new_size = new_upper - new_lower                    # new size_x = upper - lower
                 self.local_obs.insert("x", (new_lower, new_size))   # add MODIFIED x-> local map
                 self.local_obs.insert("y", (lower_y[i], size_y[i])) # add unchanged y: local map
-        
-        print(f"\nDEBUG: Detect_obs() done. Robot.local_obs:\n{self.local_obs}")
 
 
 def motion_planner(robot):
@@ -112,12 +100,6 @@ def motion_planner(robot):
     num_obs   = len(robot.local_obs)
 
     ROBOT_MAX = robot.x + robot.FOV - 1 # Robot's max range of motion (x). Set upper bound (x) to this.
-
-    print(f"\nDEBUG: motion_planner() started.")
-    print(f"obs_lower = {obs_lower}")
-    print(f"obs_size = {obs_size}")
-    print(f"num_obs = {num_obs}")
-
 
 #### Dynamics model data ####
     ## SEE SCREENSHOT 1 ##
@@ -202,9 +184,8 @@ def motion_planner(robot):
     # Now, we define the problem
     problem = cp.Problem(cp.Minimize(objective), constraints)
 
-    print(f"\nDEBUG: motion_planner() returned.\nstate.value = {state.value}\n")
-
     return problem, (state, input, boxes_low, boxes_upp), (state0, goal)
+
 
 ## Construct the motion planning problem
 
@@ -226,6 +207,7 @@ problem, vars, params = motion_planner(robot)
 state, input, boxes_low, boxes_upp = vars
 state0, goal = params
 
+
 ## Instantiate with an initial and goal condition
 
 state0.value = np.array([0.0, 0.0, 0.0, 0.0])
@@ -242,6 +224,7 @@ x_sol = state.value
 u_sol = input.value
 bl_sol = [boxes_low[i].value for i in range(num_obs)]
 bu_sol = [boxes_upp[i].value for i in range(num_obs)]
+
 
 ## Plot motion planning problem with matplotlib
 

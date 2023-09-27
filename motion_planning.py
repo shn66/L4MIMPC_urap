@@ -2,6 +2,10 @@ import numpy as np
 import cvxpy as cp
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+import random
+
+TIME_STEP = 1 # seconds
+
 """
 Task:
 - Assume the rightmost bound is x = 80, and the robot can only see x = 10 units ahead of itself.
@@ -56,27 +60,76 @@ class Obstacle_Map:
     def __len__(self):
         return len(self.size_arr[0])
 
+class World:
+
+    def __init__(self, walls, goal, global_obs):
+        self.walls = walls # walls = [[-1, -5, -1, -1], [20, 5, 1, 1]]
+        self.goal = goal
+        self.global_obs = global_obs
+        self.memory = [] # [[start, goal, state_traj, input_traj], ...]
+
+        #while 100+ .. append to memory
+
+    def hundred_simluations(self):
+        for i in range (100):
+
+            return i
+
+    def randomized_start(self):
+        lower_x, lower_y = self.walls[0][0], self.walls[0][1]
+        upper_x, upper_y = self.walls[1][0], self.walls[1][1]
+
+        found_good_start = False
+        while not found_good_start:
+            x = random.randint(lower_x, upper_x)
+            y = random.randint(lower_y, upper_y)
+
+            lower_x_arr, size_x_arr = self.global_obs.unwrap("x") # global x arrs
+            lower_y_arr, size_y_arr = self.global_obs.unwrap("y") # global y arrs
+
+            # x check
+            for i in range(len(self.global_obs)):
+                all_obs_clear = True
+                obs_x_lower = lower_x_arr[i]         # obs's lower corner x value
+                obs_x_size = size_x_arr[i]           # obs's width in x direction
+                obs_x_upper = obs_x_lower + obs_x_size 
+                
+                obs_y_lower = lower_y_arr[i]         # obs's lower corner x value
+                obs_y_size = size_y_arr[i]           # obs's width in x direction
+                obs_y_upper = obs_y_lower + obs_y_size 
+                
+                if x >= obs_x_lower and x <= obs_x_upper and y >= obs_y_lower and y <= obs_y_upper:
+                    all_obs_clear = False
+
+            if all_obs_clear:
+                found_good_start = True 
+                return (x, y)
+
+    
+
 
 class Robot:
     """
     Assume FOV is rectangle that spans x = 10 units ahead of robot, and spans all y coordinates.
     Prototype solution. Modify for circular FOV, x and y dependency, and line of sight blocking.
     """
+    # Track all states of robot throughout motion planning problem as accumulated memory
+
     def __init__(self, state, global_obs, FOV):
         self.x = state[0]   # modified during iterations
         self.FOV = FOV      # field of view (range in x)
 
-        # TODO: maintain state and input trajectories
+        self.state_traj = []
+        self.input_traj = []
 
         self.local_obs = Obstacle_Map([[], []], [[], []])
         self.global_obs = global_obs # also Obstacle_Map
 
-        print(f"\nDEBUG: Robot.init() done.")
-        print(f"Robot.FOV: x = {self.FOV} ahead.")
-        print(f"\nglobal_obs passed in:\n{self.global_obs}")
-    
+    def step(self, x_accel):
 
-    #TODO: add a function that takes  control as the argument, and updates the robot's state
+        robot_state = self.state0 + (x_accel * TIME_STEP)   
+        self.state_traj.append(robot_state)
+        self.input_traj.append(x_accel)
 
     def detect_obs(self):
         lower_arr, size_arr = self.global_obs.unwrap("x") # global x arrs
@@ -120,19 +173,12 @@ def motion_planner(robot):
 # Obstacle "i" occupies the 2-dimensional interval: 
     # [obs_lower[:, i], obs_lower[:, i] + obs_size[:, i]]
 
-    obs_lower = np.array(robot.local_obs.lower_arr)
-    obs_size  = np.array(robot.local_obs.size_arr)
+    # obs_lower = np.array(robot.local_obs.lower_arr)
+    # obs_size  = np.array(robot.local_obs.size_arr)
 
-    obs_upper = obs_lower + obs_size
-    num_obs   = len(robot.local_obs)
+    
 
-    ROBOT_MAX = robot.x + robot.FOV - 1 # Robot's max range of motion (x). Set upper bound (x) to this.
-
-    print(f"\nDEBUG: motion_planner() started.")
-    print(f"obs_lower = {obs_lower}")
-    print(f"obs_size = {obs_size}")
-    print(f"num_obs = {num_obs}")
-
+    # ROBOT_MAX = robot.x + robot.FOV - 1 # Robot's max range of motion (x). Set upper bound (x) to this.
 
 #### Dynamics model data ####
     ## SEE SCREENSHOT 1 ##
@@ -158,9 +204,14 @@ def motion_planner(robot):
     N = 100
 
 ## State constraints
+
+# Declaring variables for state and input trajectories
+    state = cp.Variable((num_states, N + 1)) # STATE IS X
+    input = cp.Variable((num_inputs, N))     # INPUT IS U
+    
     # The robot state is subject to lower_x <= x_t <= upper_x
     lower_x = np.array([-1, -5, -1, -1])
-    upper_x = np.array([ROBOT_MAX, 5, 1, 1])
+    upper_x = np.array([20,  5,  1,  1])
         # robot must lie inside the rectangle with diagonally opposite points [-1, -5] and [10, 5]
         # robot's speed must be within -1 to 1 m/s in both X and Y directions
    
@@ -170,12 +221,24 @@ def motion_planner(robot):
     upper_u = -lower_u
 
     # Declaring variables for state and input trajectories
-    state = cp.Variable((num_states, N + 1)) # STATE IS X
-    input = cp.Variable((num_inputs, N))     # INPUT IS U
+    # state = cp.Variable((num_states, N + 1)) # STATE IS X
+    # input = cp.Variable((num_inputs, N))     # INPUT IS U
 
     # Declare parameters
     state0 = cp.Parameter(num_states)
-    goal   = cp.Parameter(num_states) 
+    goal   = cp.Parameter(num_states)
+
+    robot_obs = cp.Parameter()
+    obstacle_map = robot_obs.value
+
+    robot_fov = cp.Parameter()
+
+
+    obs_lower = np.array(obstacle_map.lower_arr)
+    obs_size = np.array(obstacle_map.size_arr)
+
+    obs_upper = obs_lower + obs_size
+    num_obs   = obs_size.shape[1]
 
 #### Obstacle avoidance ####
 
@@ -218,9 +281,12 @@ def motion_planner(robot):
     problem = cp.Problem(cp.Minimize(objective), constraints)
 
     print(f"\nDEBUG: motion_planner() returned.\nstate.value = {state.value}\n")
-    return problem, (state, input, boxes_low, boxes_upp), (state0, goal)
+    return problem, (state, input, boxes_low, boxes_upp), (state0, goal, robot_obs)
+
 
 ## Construct the motion planning problem
+
+
 
 obs_lower = [[-1.0, 2.0, 2.0, 5.0, 7.0],    # lower x coord
              [1.0, -5.0, 3.0,-2.0,-5.0]]    # lower y coord
@@ -230,6 +296,11 @@ obs_size  = [[2.5, 2.5, 2.5, 1.7, 2.0],     # width (x)
 global_obs = Obstacle_Map(obs_lower, obs_size)
 robot_state = [0.0, 0.0, 0.0, 0.0]
 
+walls = [[-1, -5, -1, -1], [20, 5, 1, 1]]
+goal = [0.0, 0.0, 0.0 ,0.0]
+
+world = World(walls, goal, global_obs)
+
 robot = Robot(robot_state, global_obs, FOV = 3.0) # Robot's max range of view (x). We only go this far.
 robot.detect_obs()
 
@@ -238,35 +309,45 @@ problem, vars, params = motion_planner(robot)
 
 # X    # U    # B_L     # B_U
 state, input, boxes_low, boxes_upp = vars
-state0, goal = params
+state0, goal, robot_obs, robot_fov = params
 
 ## Instantiate with an initial and goal condition
-state_list = [i + np.array([0.1, 0.1, 0.0, 0.0]) for i in range(10)]
+# state_list = [i + np.array([0.1, 0.1, 0.0, 0.0]) for i in range(10)]
 
-while not reached_goal:
+def simulate():
 
-    # state0.value = np.array([10.0, 0.0, 0.0, 0.0])
-    # goal.value   = np.array([0.0,  0.0, 0.0 ,0.0])
-    state0.value = robot.traj[-1]
-    goal.value = np.array([0.0, 0.0, 0.0 ,0.0])
+    
+        while (state.value[0] != goal[0] or state.value[1] != goal[1]):
 
-    robot.detect_obs()
-    problem.solve(verbose=False)
+            # state0.value = np.array([10.0, 0.0, 0.0, 0.0])
+            # goal.value   = np.array([0.0,  0.0, 0.0 ,0.0])
+            state0.value = robot.traj[-1]
+            goal.value = np.array([0.0, 0.0, 0.0 ,0.0])
 
-    print("Status: ", problem.status)
-    print("Optimal cost: ", problem.value)
-    print("Solve time (seconds): ", problem.solver_stats.solve_time)
+            robot.detect_obs()
 
-    # Finally, collect the optimized trajectory
-    x_sol = state.value
-    u_sol = input.value
-    bl_sol = [boxes_low[i].value for i in range(num_obs)]
-    bu_sol = [boxes_upp[i].value for i in range(num_obs)]
+            robot_obs.value = robot.local_obs
+            robot_fov.value = np.array(state0.value, state0.value + robot.FOV)
 
-    control = u_sol[0]
-    robot.step(control)
+            problem.solve(verbose=False)
+
+            print("Status: ", problem.status)
+            print("Optimal cost: ", problem.value)
+            print("Solve time (seconds): ", problem.solver_stats.solve_time)
+
+            # Finally, collect the optimized trajectory
+            x_sol = state.value
+            u_sol = input.value
+            bl_sol = [boxes_low[i].value for i in range(num_obs)]
+            bu_sol = [boxes_upp[i].value for i in range(num_obs)]
+
+            control = u_sol[0]
+            robot.step(control)
+
+        world.memory.append([state0, goal, robot.state_traj, robot.input_traj])
 
 ## Plot motion planning problem with matplotlib
+exit()
 
 figure = plt.figure()
 plt.gca().add_patch(Rectangle((-1, -5), 11, 10, linewidth=5.0, ec='g', fc='w', alpha=0.2, label="boundary"))
