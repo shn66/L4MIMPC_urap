@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import random
 
-TIME_STEP = 1 # seconds
+TIMESTEP = 1 # seconds
 
 """
 Task:
@@ -33,85 +33,80 @@ For simulation (next week):
 """
 class Obstacle_Map:
     """
-    lower_arr = [[-1, 2, 2,  5,  7],    # lower x coord
-                 [1, -5, 3, -2, -5]])   # lower y coord
-    size_arr =  [[2.5, 2.5, 2.5, 1.7, 2],   # width (x)
-                 [2,   7,   2,   6.5, 8]])  # height(y)
+    lower_arr = [[-1.0, 2.0, 2.0,  5.0,  7.0], # x coords
+                 [1.0, -5.0, 3.0, -2.0, -5.0]] # y coords
+    size_arr  = [[2.5, 2.5, 2.5, 1.7, 2.0],    # width: x
+                 [2.0, 7.0, 2.0, 6.5, 8.0]]    # height:y
     """
     def __init__(self, lower_arr, size_arr):
-        self.lower_arr = lower_arr # <- self explanatory
-        self.size_arr = size_arr   # <- self explanatory
+        self.lower_arr = lower_arr
+        self.size_arr = size_arr
 
-    def unwrap(self, coord): 
-        i = 0 if coord == "x" else 1 #(x, y) = arr[0, 1]
+    def unwrap(self, coord):         # return tuple (lower, size)
+        i = 0 if coord == "x" else 1 # (x, y) = arr[0, 1]
         return self.lower_arr[i], self.size_arr[i]
-        # return tuple (lower, size)
         
-    def insert(self, coord, items):
-        i = 0 if coord == "x" else 1 #(x, y) = arr[0, 1]
-        
+    def insert(self, coord, items):  # insert tuple (lower, size)
+        i = 0 if coord == "x" else 1 # (x, y) = arr[0, 1]
         self.lower_arr[i].append(items[0])
         self.size_arr[i].append(items[1])
-        # insert tuple (lower, size)
-
+        
     def __str__(self):
         return f"lower_arr = {self.lower_arr}\nsize_arr = {self.size_arr}"
     
     def __len__(self):
         return len(self.size_arr[0])
 
-class World:
 
+class Environment:
+    """
+    walls = [[-1, -5, -1, -1], # lower[x_pos, y_pos, ...]
+             [10,  5,  1,  1]] # upper[x_pos, y_pos, ...]
+
+    goal = [10.0, 0.0, 0.0, 0.0]
+    global_obs = Obstacle_Map()
+    """
     def __init__(self, walls, goal, global_obs):
-        self.walls = walls # walls = [[-1, -5, -1, -1], [20, 5, 1, 1]]
+        self.walls = walls
         self.goal = goal
         self.global_obs = global_obs
-        self.memory = [] # [[start, goal, state_traj, input_traj], ...]
-
-        #while 100+ .. append to memory
-
-    def hundred_simluations(self):
-        for i in range (100):
-
-            return i
-
-    def randomized_start(self):
-        lower_x, lower_y = self.walls[0][0], self.walls[0][1]
-        upper_x, upper_y = self.walls[1][0], self.walls[1][1]
-
-        found_good_start = False
-        while not found_good_start:
-            x = random.randint(lower_x, upper_x)
-            y = random.randint(lower_y, upper_y)
-
-            lower_x_arr, size_x_arr = self.global_obs.unwrap("x") # global x arrs
-            lower_y_arr, size_y_arr = self.global_obs.unwrap("y") # global y arrs
-
-            # x check
-            for i in range(len(self.global_obs)):
-                all_obs_clear = True
-                obs_x_lower = lower_x_arr[i]         # obs's lower corner x value
-                obs_x_size = size_x_arr[i]           # obs's width in x direction
-                obs_x_upper = obs_x_lower + obs_x_size 
-                
-                obs_y_lower = lower_y_arr[i]         # obs's lower corner x value
-                obs_y_size = size_y_arr[i]           # obs's width in x direction
-                obs_y_upper = obs_y_lower + obs_y_size 
-                
-                if x >= obs_x_lower and x <= obs_x_upper and y >= obs_y_lower and y <= obs_y_upper:
-                    all_obs_clear = False
-
-            if all_obs_clear:
-                found_good_start = True 
-                return (x, y)
-
+        self.simulations = [] # [[start_pos, state_traj, input_traj], ...]
     
+    def wall_corners(self):
+        lower, upper = self.walls[0], self.walls[1]
+        return lower[0], lower[1], upper[0], upper[1]
+    #   return l_wall_x, l_wall_y, u_wall_x, u_wall_y
+
+    def random_start(self):
+        l_wall_x, l_wall_y, u_wall_x, u_wall_y = self.wall_corners()
+
+        for _ in range(1000):
+            x = random.randint(l_wall_x, u_wall_x) # random integer: lower
+            y = random.randint(l_wall_y, u_wall_y) # to upper xy inclusive
+
+            l_obs_x, s_obs_x = self.global_obs.unwrap("x") # global x arrs
+            l_obs_y, s_obs_y = self.global_obs.unwrap("y") # global y arrs
+
+            u_obs_x = l_obs_x + s_obs_x       # upper_x = lower_x + size_x
+            u_obs_y = l_obs_y + s_obs_y       # upper_y = lower_y + size_y
+            
+            for i in range(len(self.global_obs)): # loop through every obs
+                if (x >= l_obs_x[i] and x <= u_obs_x[i] and
+                    y >= l_obs_y[i] and y <= u_obs_y[i]):
+                    break                     # if inside obs: get new x,y
+                else: return x, y             # otherwise, return this x,y
+        
+        print("\nERROR: Could not find valid start with given walls, obs")
+        exit()
+
+    def simulate(self, iters):
+        for i in range(iters):
+            x, y = self.random_start()
 
 
 class Robot:
     """
-    Assume FOV is rectangle that spans x = 10 units ahead of robot, and spans all y coordinates.
-    Prototype solution. Modify for circular FOV, x and y dependency, and line of sight blocking.
+    
     """
     # Track all states of robot throughout motion planning problem as accumulated memory
 
@@ -125,9 +120,9 @@ class Robot:
         self.local_obs = Obstacle_Map([[], []], [[], []])
         self.global_obs = global_obs # also Obstacle_Map
 
-    def step(self, x_accel):
+    def step(self, x_accel): # fix because accel -> velocity -> position
 
-        robot_state = self.state0 + (x_accel * TIME_STEP)   
+        robot_state = self.state0 + (x_accel * TIMESTEP)   
         self.state_traj.append(robot_state)
         self.input_traj.append(x_accel)
 
@@ -286,20 +281,18 @@ def motion_planner(robot):
 
 ## Construct the motion planning problem
 
-
-
-obs_lower = [[-1.0, 2.0, 2.0, 5.0, 7.0],    # lower x coord
-             [1.0, -5.0, 3.0,-2.0,-5.0]]    # lower y coord
-obs_size  = [[2.5, 2.5, 2.5, 1.7, 2.0],     # width (x)
-             [2.0, 7.0, 2.0, 6.5, 8.0]]     # height(y)
+obs_lower = [[-1.0, 2.0, 2.0,  5.0,  7.0], # x coords
+             [1.0, -5.0, 3.0, -2.0, -5.0]] # y coords
+obs_size  = [[2.5, 2.5, 2.5, 1.7, 2.0],    # width: x
+             [2.0, 7.0, 2.0, 6.5, 8.0]]    # height:y
 
 global_obs = Obstacle_Map(obs_lower, obs_size)
 robot_state = [0.0, 0.0, 0.0, 0.0]
 
 walls = [[-1, -5, -1, -1], [20, 5, 1, 1]]
-goal = [0.0, 0.0, 0.0 ,0.0]
+goal = [10.0, 0.0, 0.0, 0.0]
 
-world = World(walls, goal, global_obs)
+world = Environment(walls, goal, global_obs)
 
 robot = Robot(robot_state, global_obs, FOV = 3.0) # Robot's max range of view (x). We only go this far.
 robot.detect_obs()
