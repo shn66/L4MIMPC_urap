@@ -3,6 +3,7 @@ import numpy as np
 import cvxpy as cp
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+MAX = 1000
 
 """
 For simulation (next week):
@@ -248,11 +249,15 @@ def motion_planning(world):
         TODO: Try initializing obs_lower,obs_size = cp.Parameter(MAX)
         where MAX >> # of obs. Then ignore values after last obstacle
     """
-    robot_obs = cp.Parameter()  # Obstacle_Map() dim = ?
+    robot_obs = cp.Parameter(shape=(MAX,))  # Obstacle_Map() dim = ?
     robot_FOV = cp.Parameter(2) # [low_x, upp_x] dim = 2
 
-    obs_lower = np.array(robot_obs.value.lower_arr)
-    obs_size = np.array(robot_obs.value.size_arr)
+    #obs_lower = np.array(robot_obs.value.lower_arr)
+    obs_lower = np.array(MAX) #change later to actual num
+
+    #obs_size = np.array(robot_obs.value.size_arr)
+    obs_size = np.array(MAX)
+
 
     obs_upper = obs_lower + obs_size # All = 2D np.array
     num_obs   = obs_size.shape[1] # of columns = num_obs
