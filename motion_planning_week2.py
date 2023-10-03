@@ -88,16 +88,12 @@ class Environment:
             upper_x = lower_x + size_x # upper_x, upper_y =
             upper_y = lower_y + size_y # lower_xy + size_xy
             
-            in_obs = False
             for i in range(len(self.global_obs)): # loop through every obs
-
                 if (x >= lower_x[i] and x <= upper_x[i] and
                     y >= lower_y[i] and y <= upper_y[i]):
-                    in_obs = True
                     break                         # if in obs: get new x,y
-            if not in_obs:                        # else: return this x, y
-                return [round(x, 2), round(y, 2), 0.0, 0.0]
-                                                  
+                else: return [round(x, 2), round(y, 2), 0.0, 0.0]
+                                                  # else: return this x, y
         print("\nERROR: random_state() couldn't find valid state"); exit()
 
 
