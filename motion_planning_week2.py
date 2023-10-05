@@ -61,7 +61,7 @@ class Obstacle_Map:
 class Environment:
     """
     limit = [[-1.0,-5.0,-1.0,-1.0], # lower[pos_x, pos_y,
-             [10.0, 5.0, 1.0, 1.0]] # upper vel_x, vel_y]
+             [20.0, 5.0, 1.0, 1.0]] # upper vel_x, vel_y]
     goal = [x_pos, y_pos, x_vel, y_vel]
 
     global_obs = Obstacle_Map()
@@ -101,7 +101,7 @@ class Environment:
         print("\nERROR: random_state() couldn't find valid state"); exit()
 
 
-    def plot_problem(self, x_sol, goal):
+    def plot_problem(self, x_sol, start, goal):
         # Graph the motion planning problem
         # %matplotlib inline
 
@@ -110,6 +110,7 @@ class Environment:
                             ec='g', fc='w', alpha=0.2, label="boundary"))
 
         plt.plot(x_sol[0, :], x_sol[1, :], 'o', label="trajectory")
+        plt.plot(start[0], start[1], "*", linewidth=10, label="start")
         plt.plot(goal[0], goal[1], '*', linewidth=10, label="goal")
 
         obs_lower = self.global_obs.lower_arr
@@ -243,12 +244,12 @@ def motion_planning(world, robot):
 
 ## State constraints
 
-    pos = state0[0]            # robot's current pos (x)
-    lower = world.limit[0][1:] # lower arr's last 3 vals
-    upper = world.limit[1][1:] # upper arr's last 3 vals
+    pos = state0[0]          # robot's current pos (x)
+    limit_l = world.limit[0] # world.limit lower array
+    limit_u = world.limit[1] # world.limit upper array
 
-    lower_x = cp.vstack([pos] + lower)             # arr[pos, -5, -1, -1]
-    upper_x = cp.vstack([pos + robot.FOV] + upper) # arr[pos+FOV, 5, 1, 1]
+    lower_x = cp.vstack([pos] + limit_l[1:])             # arr[pos, -5, -1, -1]
+    upper_x = cp.vstack([pos + robot.FOV] + limit_u[1:]) # arr[pos+FOV, 5, 1, 1]
 
     lower_x = lower_x[:, 0]      # real scuffed solution
     upper_x = upper_x[:, 0]      # .shape (4, 1) to (4,)
@@ -256,7 +257,7 @@ def motion_planning(world, robot):
     lower_u = np.array([-2, -2]) # input u_t lies within
     upper_u = -1 * lower_u       # low_u <= u_t <= upp_u
 
-    print(f"\nDEBUG: CP.vars/params done.\nlower_x = {lower_x},\nupper_x = {upper_x}")
+    print(f"\nDEBUG: CP variables done.\nlower_x = {lower_x},\nupper_x = {upper_x}")
 
 
 #### Obstacle avoidance ####
@@ -265,9 +266,9 @@ def motion_planning(world, robot):
     boxes_low = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)] # BOXES_LOW IS B_L
     boxes_upp = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)] # BOXES_UPP IS B_U
 
-    M = np.diag([2 * upper_x[0], 2 * upper_x[1]]) # big-M parameter
+    # M = np.diag([2 * upper_x[0], 2 * upper_x[1]]) # big-M parameter
 
-    print(f"\nValue of M matrix =\n{M}")
+    M = np.diag([2 * limit_u[0], 2 * limit_u[1]]) # FIXME: TEMP CODE
     
     constraints = [state[:, 0] == state0] # initial state constraint
     objective = 0
@@ -285,10 +286,6 @@ def motion_planning(world, robot):
         # big-M formulation of obstacle avoidance constraints
         for i in range(world.MAX):
 
-            print(f"\ni = {i}, M.shape = {M.shape}, len(boxes_low) = {len(boxes_low)}")
-            print(f"\nValue of boxes_low[i][:, k] = {boxes_low[i][:, k]}")
-            print(f"Shape of boxes_low[i][:, k] = {boxes_low[i][:, k].shape}\n")
-            
             constraints += [
                 state[0:2, k + 1] <= obs_lower[:, i] + M @ boxes_low[i][:, k],
                 state[0:2, k + 1] >= obs_upper[:, i] - M @ boxes_upp[i][:, k],
@@ -306,7 +303,7 @@ def motion_planning(world, robot):
     # Define the motion planning problem
     problem = cp.Problem(cp.Minimize(objective), constraints)
 
-    # print(f"\nDEBUG: motion_planning() done.\nstate.value = {state.value}")
+    print(f"\nDEBUG: motion_planning() done. return problem, vars, params")
     return problem, (state, input, boxes_low, boxes_upp), (state0, goal, obs_lower, obs_upper)
 
 
@@ -319,17 +316,19 @@ def run_simulations(num_iters):
     size_arr  = [[2.5, 2.5, 2.5, 1.7, 2.0],    # width: x
                  [2.0, 7.0, 2.0, 6.5, 8.0]]    # height:y
     
-    goal0 = [10.0, 0.0, 0.0, 0.0]
+    goal0 = [20.0, 0.0, 0.0, 0.0]
     limit = [[-1.0,-5.0,-1.0,-1.0], # lower[pos_x, pos_y,
-             [80.0, 5.0, 1.0, 1.0]] # upper vel_x, vel_y]
+             [20.0, 5.0, 1.0, 1.0]] # upper vel_x, vel_y]
     
     global_obs = Obstacle_Map(lower_arr, size_arr)
-    world = Environment(limit, goal0, global_obs, MAX = 5)
+    world = Environment(limit, goal0, global_obs, MAX = 10)
 
     # Randomize start, get vars & params
     for _ in range(num_iters):
 
+        # FIXME: random_state sometimes starts in obs, always too far right
         start = world.random_state()
+
         robot = Robot(start, global_obs, TIME=0.2, FOV=5.0)
 
         problem, vars, params = motion_planning(world, robot)
@@ -346,11 +345,12 @@ def run_simulations(num_iters):
             state0.value = np.array(robot.state)
             goal.value = np.array(world.goal)
 
+            # FIXME: detect_obs does not collect obs, nor modify local_obs
             obs = robot.detect_obs()
             l = list(obs.lower_arr)
             s = list(obs.size_arr)
 
-            while (world.MAX > len(l)):
+            while (len(l[0]) < world.MAX):
                 l[0].append(-2.0)
                 l[1].append(-2.0)
                 s[0].append(0.0)
@@ -359,8 +359,10 @@ def run_simulations(num_iters):
             # l += [[-2.0, -2.0]] * (world.MAX - len(l)) # index len(L) to world.MAX are fake obs
             # s += [[0.0, 0.0]]   * (world.MAX - len(s)) # assume fake obs have lower x, y = -2.0
 
-            obs_lower.value = np.array(l).T
-            obs_upper.value = np.array(l).T + np.array(s).T
+            obs_lower.value = np.array(l)
+            obs_upper.value = np.array(l) + np.array(s)
+
+            print("Problem: solving...")
 
             # Done: collect optimized trajectory
             problem.solve(verbose=False)
@@ -376,7 +378,7 @@ def run_simulations(num_iters):
 
             # Collect solutions in robot & world
             robot.update_state(u_sol)
-            world.plot_problem(x_sol, goal0)
+            world.plot_problem(x_sol, start, goal0)
 
         world.solutions += [start, goal0, robot.state_traj, robot.input_traj]
 
