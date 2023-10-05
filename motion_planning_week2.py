@@ -4,7 +4,6 @@ import cvxpy as cp
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-TIME_STEP = 0.2 # number of seconds between state updates
 
 class Obstacle_Map:
     """
@@ -18,28 +17,30 @@ class Obstacle_Map:
         self.lower_arr = lower_arr
         self.size_arr = size_arr
 
-        x = 0 # checks both arrays have x, y
+        case = 0 # checks both arrays have x, y
         if not (len(lower_arr) == len(size_arr) == 2):
-            x = 1
-        else: # checks all arrays have = len
+            case = 1
+        else: # checks all arrays are equal len
             for arr in lower_arr + size_arr:
                 if len(arr) != len(lower_arr[0]):
-                    x = 2; break
+                    case = 2
+                    break       
                 if not all(isinstance(i, float) for i in arr):
-                    x = 3; break # checks all items are floats
-        if x != 0:
-            print(f"\nERROR: Obs_Map.init() failed, see case {x}"); exit()
+                    case = 3    # checks all values are floats
+                    break 
+        if case != 0:
+            print(f"\nERROR: Obs_Map.init() failed @ case {case}"); exit()
     
 
     def insert(self, coord, items):  # insert tuple (lower, size)
         i = 0 if coord == "x" else 1 # (x, y) = arr[0, 1]
         lower, size = items
-        found = False
+        in_arr = False
 
         for j in range(len(self)): # loop through lower, size arr
             if self.lower_arr[i][j] == lower and self.size_arr[i][j] == size:
-                found = True # if lower, size pair already exists
-        if not found:
+                in_arr = True # if lower, size pair already found
+        if not in_arr:
             self.lower_arr[i].append(lower) # if pair not in arr:
             self.size_arr[i].append(size)   # append(lower, size)
         else:
@@ -76,11 +77,11 @@ class Environment:
 
 
     def random_state(self):
-        lower, upper = self.limit[0], self.limit[1] # 0 = lower, 1 = upper
+        lower, upper = self.limit                  # unpack list -> 2 vars
 
-        for _ in range(self.MAX):                  # 0 = x vals, 1 = y val
-            x = random.uniform(lower[0], upper[0]) # random float #: lower
-            y = random.uniform(lower[1], upper[1]) # to upper xy inclusive
+        for _ in range(100):                       # arr[0] = x,arr[1] = y
+            x = random.uniform(lower[0], upper[0]) # random floats between
+            y = random.uniform(lower[1], upper[1]) # lower,upper inclusive
 
             lower_x, size_x = self.global_obs.unwrap("x") # global x array
             lower_y, size_y = self.global_obs.unwrap("y") # global y array
@@ -88,12 +89,15 @@ class Environment:
             upper_x = lower_x + size_x # upper_x, upper_y =
             upper_y = lower_y + size_y # lower_xy + size_xy
             
+            in_obs = False
             for i in range(len(self.global_obs)): # loop through every obs
                 if (x >= lower_x[i] and x <= upper_x[i] and
                     y >= lower_y[i] and y <= upper_y[i]):
-                    break                         # if in obs: get new x,y
-                else: return [round(x, 2), round(y, 2), 0.0, 0.0]
-                                                  # else: return this x, y
+                    in_obs = True                 # if inside walls of obs
+                    break                         # break to get new state
+            if not in_obs:                        # else return this state
+                return [round(x, 2), round(y, 2), 0.0, 0.0]
+
         print("\nERROR: random_state() couldn't find valid state"); exit()
 
 
@@ -116,6 +120,7 @@ class Environment:
 
             plt.gca().add_patch(Rectangle((obs_lower[0][i], obs_lower[1][i]),
                 obs_size[0][i], obs_size[1][i], ec='r', fc='r', label=label))
+            
         plt.legend(loc = 3)
         plt.show()
 
@@ -125,11 +130,12 @@ class Robot:
     state = [pos_x, pos_y, vel_x, vel_y]
     global/local_obs = Obstacle_Map()
 
+    TIME = seconds between state updates
     FOV = Field Of View: range in x dir.
-    state/input_traj = [[x1], [x2], ...]
     """
-    def __init__(self, state, global_obs, FOV):
+    def __init__(self, state, global_obs, TIME, FOV):
         self.state = state
+        self.TIME = TIME
         self.FOV = FOV
 
         self.global_obs = global_obs # Obstacle_Map again
@@ -140,13 +146,13 @@ class Robot:
 
 
     def update_state(self, input):
-        t = TIME_STEP
-        acc_x, acc_y = input # unwrap list -> n variables
+        t = self.TIME
+        acc_x, acc_y = input # unpack list -> n variables
         pos_x, pos_y, vel_x, vel_y = self.state
 
         pos_x += vel_x * t + (0.5 * acc_x * t ** 2)
         pos_y += vel_y * t + (0.5 * acc_y * t ** 2)
-        vel_x += acc_x * t # x = x0 + v * t + 0.5(a* t^2)
+        vel_x += acc_x * t # x = x0 + v * t + 0.5(a * t^2)
         vel_y += acc_y * t # v = v0 + a * t
         
         self.state = [pos_x, pos_y, vel_x, vel_y] # assign new state array
@@ -157,12 +163,12 @@ class Robot:
 
 
     def detect_obs(self):
-        lower_arr, size_arr = self.global_obs.unwrap("x") # global x arrs
-        lower_y, size_y = self.global_obs.unwrap("y")     # global y arrs
+        lower_x, size_x = self.global_obs.unwrap("x") # global_obs.x arrs
+        lower_y, size_y = self.global_obs.unwrap("y") # global_obs.y arrs
 
         for i in range(len(self.global_obs)):# loop through each obstacle
-            obs_lower = lower_arr[i]         # obs's lower corner x value
-            obs_size = size_arr[i]           # obs's width in x direction
+            obs_lower = lower_x[i]           # obs's lower corner x value
+            obs_size = size_x[i]             # obs's width in x direction
 
             obs_upper = obs_lower + obs_size                        # obs's upper corner x value
             in_FOV = lambda x: x >= self.state[0] and x <= self.FOV # is obs_corner in robot.FOV
@@ -182,9 +188,10 @@ class Robot:
                 self.local_obs.insert("y", (lower_y[i], size_y[i])) # add unchanged y: local map
         
         print(f"\nDEBUG: detect_obs() done. local_obs:\n{self.local_obs}")
+        return self.local_obs
+        
 
-
-def motion_planning(world):
+def motion_planning(world, robot):
     """
     Inputs:
     obs_size:   2 x num_obs array, describing width and height of the obstacles, num_obs = # of obstacles
@@ -197,7 +204,7 @@ def motion_planning(world):
     """
 #### Dynamics model data ####
     ## SEE SCREENSHOT 1 ##
-    dt = TIME_STEP
+    dt = robot.TIME
 
     A = np.matrix(
         [[1, 0, dt,0],
@@ -220,15 +227,9 @@ def motion_planning(world):
     Q = 1000 * np.identity(dim_state)
     R = 50   * np.identity(dim_input)
     N = 100
-
-## State constraints
-    lower_x = np.array(world.limit[0]) # [[-1.0,-5.0,-1.0,-1.0], [pos_x, pos_y,
-    upper_x = np.array(world.limit[1]) #  [10.0, 5.0, 1.0, 1.0]]  vel_x, vel_y]
-   
-## Input constraints
-    lower_u = np.array([-2, -2]) # input u_t lies within
-    upper_u = -1 * lower_u       # low_u <= u_t <= upp_u
-
+    
+## Vars & Parameters
+    
     # Declare variables for state and input trajectories
     state = cp.Variable((dim_state, N + 1)) # STATE IS X
     input = cp.Variable((dim_input, N))     # INPUT IS U
@@ -237,50 +238,36 @@ def motion_planning(world):
     state0 = cp.Parameter(dim_state) # state0, goal have
     goal   = cp.Parameter(dim_state) # arrays of len = 4
 
-    """
-    TODO: Fix 2 issues with cp.Parameter().
-    
-    cp.Parameter(n) must be initialized with a size/dimensions n,
-    but we don't know # of columns/obs in robot_obs ahead of time
+    obs_lower = cp.Parameter((2, world.MAX)) # rows = 2 for x and y array
+    obs_upper = cp.Parameter((2, world.MAX)) # cols = world.MAX of all obs
 
-    Try initializing obs_lower, obs_upper = cp.Parameter(MAX) for
-    MAX >> number of obs. Then ignore values above maximum number
+## State constraints
 
-    We can't use param.value because cp.Parameter values are None
-    when initialized. Can't use max, min, or chaining (0 < p < 1)
-    """
-## OLD APPROACH ##
-    # obs_lower = np.array(robot_obs.value.lower_arr)
-    # obs_size = np.array(robot_obs.value.size_arr)
-    
-    # obs_upper = obs_lower + obs_size
-    # num_obs = obs_size.shape[1]
+    pos = state0[0]            # robot's current pos (x)
+    lower = world.limit[0][1:] # lower arr's last 3 vals
+    upper = world.limit[1][1:] # upper arr's last 3 vals
 
-    # lower_x[0] = max(lower_x[0], robot_FOV[0])
-    # upper_x[0] = min(upper_x[0], robot_FOV[1])
+    lower_x = cp.vstack([pos] + lower)             # arr[pos, -5, -1, -1]
+    upper_x = cp.vstack([pos + robot.FOV] + upper) # arr[pos+FOV, 5, 1, 1]
 
-## NEW APPROACH ##
-    robot_FOV  = cp.Parameter()  # 1 number, upper x bound of FOV
-    upper_x[0] = robot_FOV.value # FIXME: make sure this is valid
+    lower_x = lower_x[:, 0]      # real scuffed solution
+    upper_x = upper_x[:, 0]      # .shape (4, 1) to (4,)
 
-    obs_lower = cp.Parameter((2, world.MAX)) # 2 rows: x,y arrays
-    obs_upper = cp.Parameter((2, world.MAX)) # MAX cols: # of obs
+    lower_u = np.array([-2, -2]) # input u_t lies within
+    upper_u = -1 * lower_u       # low_u <= u_t <= upp_u
 
-    num_obs = 0                        # find index in arr where fake obs start
-    for i in range(world.MAX):         # assume fake obs have lower x,y = -99.0
-        if not obs_lower[0][i] + 99.0: # -99.0 + 99.0 = 0;  if (not 0) executes
-            num_obs = i                # current index = fake obs;  num_obs = i
-
-    print(f"\nDEBUG: cp.Params. upper_x = {upper_x}, num_obs = {num_obs}")
+    print(f"\nDEBUG: CP.vars/params done.\nlower_x = {lower_x},\nupper_x = {upper_x}")
 
 
 #### Obstacle avoidance ####
 
     # Declaring binary variables for obstacle avoidance formulation
-    boxes_low = [cp.Variable((2, N), boolean=True) for _ in range(num_obs)] # BOXES_LOW IS B_L
-    boxes_upp = [cp.Variable((2, N), boolean=True) for _ in range(num_obs)] # BOXES_UPP IS B_U
+    boxes_low = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)] # BOXES_LOW IS B_L
+    boxes_upp = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)] # BOXES_UPP IS B_U
 
     M = np.diag([2 * upper_x[0], 2 * upper_x[1]]) # big-M parameter
+
+    print(f"\nValue of M matrix =\n{M}")
     
     constraints = [state[:, 0] == state0] # initial state constraint
     objective = 0
@@ -289,14 +276,19 @@ def motion_planning(world):
         ## SEE SCREENSHOT 1 ##
         # @ is matrix (dot) multiplication
         constraints += [state[:, k + 1] == A @ state[:, k] + B @ input[:, k]]   # add dynamics constraints
-          
+
         constraints += [lower_x <= state[:, k + 1], upper_x >= state[:, k + 1]] # adding state constraints
     
         constraints += [lower_u <= input[:, k], upper_u >= input[:, k]]         # adding input constraints
 
 
         # big-M formulation of obstacle avoidance constraints
-        for i in range(num_obs):
+        for i in range(world.MAX):
+
+            print(f"\ni = {i}, M.shape = {M.shape}, len(boxes_low) = {len(boxes_low)}")
+            print(f"\nValue of boxes_low[i][:, k] = {boxes_low[i][:, k]}")
+            print(f"Shape of boxes_low[i][:, k] = {boxes_low[i][:, k].shape}\n")
+            
             constraints += [
                 state[0:2, k + 1] <= obs_lower[:, i] + M @ boxes_low[i][:, k],
                 state[0:2, k + 1] >= obs_upper[:, i] - M @ boxes_upp[i][:, k],
@@ -314,8 +306,8 @@ def motion_planning(world):
     # Define the motion planning problem
     problem = cp.Problem(cp.Minimize(objective), constraints)
 
-    print(f"\nDEBUG: motion_planning() done.\nstate.value = {state.value}")
-    return problem, (state, input, boxes_low, boxes_upp), (state0, goal, robot_FOV, obs_lower, obs_upper)
+    # print(f"\nDEBUG: motion_planning() done.\nstate.value = {state.value}")
+    return problem, (state, input, boxes_low, boxes_upp), (state0, goal, obs_lower, obs_upper)
 
 
 def run_simulations(num_iters):
@@ -329,41 +321,46 @@ def run_simulations(num_iters):
     
     goal0 = [10.0, 0.0, 0.0, 0.0]
     limit = [[-1.0,-5.0,-1.0,-1.0], # lower[pos_x, pos_y,
-             [10.0, 5.0, 1.0, 1.0]] # upper vel_x, vel_y]
+             [80.0, 5.0, 1.0, 1.0]] # upper vel_x, vel_y]
     
     global_obs = Obstacle_Map(lower_arr, size_arr)
-    world = Environment(limit, goal0, global_obs, MAX = 100)
+    world = Environment(limit, goal0, global_obs, MAX = 5)
 
     # Randomize start, get vars & params
     for _ in range(num_iters):
 
         start = world.random_state()
-        robot = Robot(start, global_obs, FOV = 5.0)
+        robot = Robot(start, global_obs, TIME=0.2, FOV=5.0)
 
-        problem, vars, params = motion_planning(world)
+        problem, vars, params = motion_planning(world, robot)
 
         state, input, boxes_low, boxes_upp = vars
-        state0, goal, robot_FOV, obs_lower, obs_upper = params
+        state0, goal, obs_lower, obs_upper = params
 
+        diff = np.array(robot.state) - np.array(goal0)
+        TOL = 0.001
 
         # Initialize all CP parameter values
-        while (robot.state != goal0):
+        while np.linalg.norm(diff) > TOL:
 
             state0.value = np.array(robot.state)
             goal.value = np.array(world.goal)
-            robot_FOV.value = np.array(robot.state[0] + robot.FOV)
 
-            robot.detect_obs()
-            OBS = robot.local_obs
+            obs = robot.detect_obs()
+            l = list(obs.lower_arr)
+            s = list(obs.size_arr)
 
-            L = list(OBS.lower_arr)
-            S = list(OBS.size_arr)
+            while (world.MAX > len(l)):
+                l[0].append(-2.0)
+                l[1].append(-2.0)
+                s[0].append(0.0)
+                s[1].append(0.0)
+           
+            # l += [[-2.0, -2.0]] * (world.MAX - len(l)) # index len(L) to world.MAX are fake obs
+            # s += [[0.0, 0.0]]   * (world.MAX - len(s)) # assume fake obs have lower x, y = -2.0
 
-            L += [-99.0] * (world.MAX - len(L)) # index len(L) to world.MAX are fake obs
-            S += [-99.0] * (world.MAX - len(S)) # assume fake obs have lower x,y = -99.0
-
-            obs_lower.value = np.array(L)
-            obs_upper.value = np.array(L + S)
+            obs_lower.value = np.array(l).T
+            obs_upper.value = np.array(l).T + np.array(s).T
 
             # Done: collect optimized trajectory
             problem.solve(verbose=False)
@@ -374,12 +371,12 @@ def run_simulations(num_iters):
 
             x_sol = state.value
             u_sol = input.value
-            bl_sol = [boxes_low[i].value for i in range(len(OBS))]
-            bu_sol = [boxes_upp[i].value for i in range(len(OBS))]
+            bl_sol = [boxes_low[i].value for i in range(world.MAX)]
+            bu_sol = [boxes_upp[i].value for i in range(world.MAX)]
 
             # Collect solutions in robot & world
             robot.update_state(u_sol)
-            world.plot_problem(x_sol)
+            world.plot_problem(x_sol, goal0)
 
         world.solutions += [start, goal0, robot.state_traj, robot.input_traj]
 
