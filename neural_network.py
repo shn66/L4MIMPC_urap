@@ -80,6 +80,26 @@ class MultiNet(nn.Module):
         out = self.relu(out)
         return self.lin2(out)
 
+class ConvNet(nn.Module):
+
+    def __init__(self):
+        super(ConvNet, self).__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.full1 = nn.Linear(16 * 5 * 5, 120)
+        self.full2 = nn.Linear(120, 84)
+        self.full3 = nn.Linear(84, 10)
+
+    def forward(self, x):
+        # -> n, 3, 32, 32
+        x = self.pool(fn.relu(self.conv1(x))) # -> n, 6, 14, 14
+        x = self.pool(fn.relu(self.conv2(x))) # -> n, 16, 5, 5
+        x = x.view(-1, 16 * 5 * 5) # -> n, 400
+        x = fn.relu(self.full1(x)) # -> n, 120
+        x = fn.relu(self.full2(x)) # -> n, 84
+        return self.full3(x)       # -> n, 10
+
 
 def feed_forward_nn(BOARD = False):
     """
@@ -187,27 +207,6 @@ def feed_forward_nn(BOARD = False):
                 writer.add_pr_curve(str(i), x, y, global_step=0)
                 writer.close()
     return model
-
-
-class ConvNet(nn.Module):
-
-    def __init__(self):
-        super(ConvNet, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.full1 = nn.Linear(16 * 5 * 5, 120)
-        self.full2 = nn.Linear(120, 84)
-        self.full3 = nn.Linear(84, 10)
-
-    def forward(self, x):
-        # -> n, 3, 32, 32
-        x = self.pool(fn.relu(self.conv1(x))) # -> n, 6, 14, 14
-        x = self.pool(fn.relu(self.conv2(x))) # -> n, 16, 5, 5
-        x = x.view(-1, 16 * 5 * 5) # -> n, 400
-        x = fn.relu(self.full1(x)) # -> n, 120
-        x = fn.relu(self.full2(x)) # -> n, 84
-        return self.full3(x)       # -> n, 10
 
 
 def convolution_nn():
