@@ -84,7 +84,8 @@ class Environment:
         self.MAX = MAX
 
         self.global_obs = global_obs
-        self.solutions = []      # [soln=[state0, state_traj, input_traj], ...]
+        self.solutions = [] # [[start, robot.state, bl_sol, bu_sol], [...] ...]
+        self.trajects  = [] # [[start, goal0, state_traj, input_traj], [ ] ...]
 
 
     def random_state(self):
@@ -135,6 +136,11 @@ class Environment:
         plt.show()
 
 
+    def export_file(self): # TODO: write these to txt file
+        self.solutions
+        self.trajects
+
+
 class Robot:
     """
     state = [pos_x, pos_y, vel_x, vel_y]
@@ -151,8 +157,8 @@ class Robot:
         self.global_obs = global_obs # Obstacle_Map again
         self.local_obs = Obstacle_Map([[], []], [[], []])
 
-        self.state_traj = [self.state] # track all states
-        self.input_traj = [] # and inputs by updating arr
+        self.state_traj = [[state[0]], [state[1]], [state[2]], [state[3]]]
+        self.input_traj = [[], []] # track states, inputs by updating arrs
 
 
     def detect_obs(self):
@@ -187,10 +193,9 @@ class Robot:
         print(f"\nDEBUG: detect_obs() done. local_obs:\n{self.local_obs}")
     
 
-    def update_state(self, input):
+    def update_state(self, acc_x, acc_y): # TODO: FIXME
         t = self.TIME
-        acc_x, acc_y = input # unpack list -> n variables
-        pos_x, pos_y, vel_x, vel_y = self.state
+        pos_x, pos_y, vel_x, vel_y = self.state # unpack state -> 4 vars
 
         pos_x += vel_x * t + (0.5 * acc_x * t ** 2)
         pos_y += vel_y * t + (0.5 * acc_y * t ** 2)
@@ -198,8 +203,8 @@ class Robot:
         vel_y += acc_y * t # v = v0 + a * t
         
         self.state = [pos_x, pos_y, vel_x, vel_y] # assign new state array
-        self.state_traj += list(self.state)       # add copy of state arr,
-        self.input_traj += list(input)            # record given input arr
+        self.state_traj.append(list(self.state))  # add copy of state arr,
+        self.input_traj.append(list(input))       # record given input arr
 
         print(f"\nDEBUG: update_state() done. Robot.state:\n{self.state}")
 
@@ -380,17 +385,17 @@ def run_simulations(num_iters):
 
             x_sol = state.value
             u_sol = input.value
-            print(f"\nDEBUG: x_sol = {x_sol}")
-            print(f"\nDEBUG: u_sol = {u_sol}")
-            exit()
 
             bl_sol = [boxes_low[i].value for i in range(world.MAX)]
             bu_sol = [boxes_upp[i].value for i in range(world.MAX)]
 
-            # Collect solutions in robot & world
-            robot.update_state(u_sol)
-            world.plot_problem(x_sol, start, goal0)
+            # Collect solutions in world & robot
+            world.solutions.append([start, robot.state, bl_sol, bu_sol])
 
-        world.solutions += [start, goal0, robot.state_traj, robot.input_traj]
+            # 1st value in arr(  x_accel  ,   y_accel  )
+            robot.update_state(u_sol[0][0], u_sol[1][0])
+        
+        world.trajects.append([start, goal0, robot.state_traj, robot.input_traj])
+        # world.plot_problem(x_sol, start, goal0)
 
 run_simulations(num_iters = 1)
