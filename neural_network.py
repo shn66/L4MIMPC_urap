@@ -341,5 +341,6 @@ def main():
     # print list, get input, run func
     for i in range(len(funcs)):
         print(f"{i + 1}: {funcs[i]}")
+    print (int(input()) - 1)
     eval(funcs[int(input()) - 1])
 main()

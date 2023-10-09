@@ -340,7 +340,6 @@ def run_simulations(num_iters, plot_steps):
 
     # Randomize start, get vars & params
     for _ in range(num_iters):
-
         start = world.random_state(bound = 0.5)
         print(f"\nDEBUG: world.random_state() done. start = {start}")
 
@@ -384,11 +383,13 @@ def run_simulations(num_iters, plot_steps):
             u_sol = input.value
             bl_sol = [boxes_low[i].value for i in range(world.MAX)]
             bu_sol = [boxes_upp[i].value for i in range(world.MAX)]
-
-            # Collect solutions in world & robot
+            
             world.solutions.append([start, robot.state, bl_sol, bu_sol])
 
-            robot.update_state(u_sol[0][0], u_sol[1][0])
+
+            # Collect solutions in world & robot
+            if u_sol is not None:
+                robot.update_state(u_sol[0][0], u_sol[1][0])
             # 1st value in arr(  x_accel  ,   y_accel  )
             if plot_steps:
                 world.plot_problem(x_sol, start, goal0)
