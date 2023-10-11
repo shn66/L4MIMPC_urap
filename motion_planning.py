@@ -197,7 +197,8 @@ class Robot:
         vel_y += acc_y * t # v = v0 + a * t
         
         new_state  = [pos_x, pos_y, vel_x, vel_y] # assign new state array
-        self.state = [round(s, 4) for s in new_state]
+        # self.state = [round(s, 4) for s in new_state]
+        self.state = [s for s in new_state]
 
         for i in range(4):                        # write calculated state
             self.state_traj[i].append(self.state[i])
@@ -243,7 +244,7 @@ def motion_planning(world, robot):
     ## SEE SCREENSHOT 2 ##
     Q = 100 * np.identity(dim_state)  # originally 1000
     R = 50  * np.identity(dim_input)
-    N = 100
+    N = 50
     
 ## Vars & Parameters
     
@@ -346,7 +347,7 @@ def run_simulations(num_iters, plot_steps):
         start = world.random_state(bound = 0.5)
         print(f"\nDEBUG: world.random_state() done. start = {start}")
 
-        robot = Robot(start, global_obs, TIME=0.2, FOV=5.0)
+        robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
         problem, vars, params = motion_planning(world, robot)
 
         state, input, boxes_low, boxes_upp = vars
@@ -399,4 +400,4 @@ def run_simulations(num_iters, plot_steps):
         world.plot_problem(robot.state_traj, start, goal0)
 
 # FIXME: robot.state will clip into the edge of an obstacle, making u_sol invalid
-run_simulations(num_iters=1, plot_steps=False) # Make this true to see every plot
+run_simulations(num_iters=1, plot_steps=True) # Make this true to see every plot
