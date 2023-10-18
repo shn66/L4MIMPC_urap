@@ -179,7 +179,7 @@ class Robot:
                 self.local_obs.insert((new_lower, new_size), (lower_y[i], size_y[i]))
                 # add modified vals  ((      x_items      ), (       y_items       ))
 
-        print(f"\nDEBUG: detect_obs() done. local_obs:\n{[round(x, 4) for x in self.local_obs]}")
+        print(f"\nDEBUG: detect_obs() done. local_obs:\n{self.local_obs}")
     
 
     def update_state(self, acc_x, acc_y):
