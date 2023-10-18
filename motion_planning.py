@@ -31,37 +31,33 @@ class Obstacle_Map:
                     break 
         if case != 0:
             print(f"\nERROR: Obs_Map.init() failed @ case {case}"); exit()
-    
 
-    def unwrap(self): # return (x_l, x_s, y_l, y_s)
-        lower = self.lower_arr
-        size = self.size_arr
-        return lower[0], size[0], lower[1], size[1]
 
     def insert(self, items_x, items_y): # items_# = (lower_#, size_#)
         lower_x, size_x = items_x
         lower_y, size_y = items_y
 
-        self.lower_arr[0].append(lower_x)
-        self.size_arr [0].append(round(size_x, 4))
-        self.lower_arr[1].append(lower_y)
-        self.size_arr [1].append(size_y)
-    
-
-    def clean(self): # remove duplicate coordinates
-        def cln(arr):
-            x_arr, y_arr = [], []
-            seen = set()
+        found = False
+        for i in range(len(self.lower_arr[0])):
             
-            for x, y in zip(arr[0], arr[1]):
-                if (x, y) not in seen:
-                    seen.add((x, y))
-                    x_arr.append(x)
-                    y_arr.append(y)
-            return [x_arr, y_arr]
-        
-        self.lower_arr = cln(self.lower_arr)
-        self.size_arr = cln(self.size_arr)
+            # check all 4 vals at index i
+            if (lower_x == self.lower_arr[0][i] and
+                lower_y == self.lower_arr[1][i] and
+                size_x == self.size_arr[0][i] and
+                size_y == self.size_arr[1][i]):
+                found = True
+
+        if not found: # append all 4 vals to arrays
+            self.lower_arr[0].append(lower_x)
+            self.lower_arr[1].append(lower_y)
+            self.size_arr[0].append(size_x)
+            self.size_arr[1].append(size_y)
+
+    
+    def unwrap(self): # return (x_l, x_s, y_l, y_s)
+        lower = self.lower_arr
+        size = self.size_arr
+        return lower[0], size[0], lower[1], size[1]
     
     def __str__(self):
         return f"lower_arr = {self.lower_arr}\nsize_arr = {self.size_arr}"
@@ -108,7 +104,7 @@ class Environment:
                     in_obs = True                 # if inside walls of obs
                     break                         # break to get new state
             if not in_obs:                        # else return this state
-                return [round(x, 4), round(y, 4), 0.0, 0.0]
+                return [x, y, 0.0, 0.0]
 
         print("\nERROR: random_state() couldn't find valid state"); exit()
 
@@ -173,18 +169,17 @@ class Robot:
                 # add unchanged vals ((      x_items      ), (       y_items       ))
             continue
 
-            # The code below is mutually exclusive with calling self.local_obs.clean()
-            if (in_FOV(obs_lower) or in_FOV(obs_upper)):  # FOV partially captures obs
+            # TEMP CODE. Deleted Obs_Map.clean()
+            if (in_FOV(obs_lower) or in_FOV(obs_upper)): # FOV partially captures obs
 
-                new_lower = min(obs_lower, x + self.FOV)  # new lower and upper coords
-                new_upper = min(obs_upper, x + self.FOV)  # min(obs_corner, FOVs edge)
+                new_lower = min(obs_lower, x + self.FOV) # new lower and upper coords
+                new_upper = min(obs_upper, x + self.FOV) # min(obs_corner, FOVs edge)
 
-                new_size = new_upper - new_lower          # new size_x = upper - lower
+                new_size = new_upper - new_lower         # new size_x = upper - lower
                 self.local_obs.insert((new_lower, new_size), (lower_y[i], size_y[i]))
                 # add modified vals  ((      x_items      ), (       y_items       ))
 
-        self.local_obs.clean() # remove duplicate coordinates
-        print(f"\nDEBUG: detect_obs() done. local_obs:\n{self.local_obs}")
+        print(f"\nDEBUG: detect_obs() done. local_obs:\n{[round(x, 4) for x in self.local_obs]}")
     
 
     def update_state(self, acc_x, acc_y):
@@ -196,10 +191,7 @@ class Robot:
         vel_x += acc_x * t # x = x0 + v * t + 0.5(a * t^2)
         vel_y += acc_y * t # v = v0 + a * t
         
-        new_state  = [pos_x, pos_y, vel_x, vel_y] # assign new state array
-        # self.state = [round(s, 4) for s in new_state]
-        self.state = [s for s in new_state]
-
+        self.state = [pos_x, pos_y, vel_x, vel_y] # assign new state array
         for i in range(4):                        # write calculated state
             self.state_traj[i].append(self.state[i])
 
@@ -343,8 +335,9 @@ def run_simulations(num_iters, plot_steps):
 
     # Randomize start, get vars & params
     for _ in range(num_iters):
+
         start = world.random_state(bound = 0.5)
-        print(f"\nDEBUG: world.random_state() done. start = {start}")
+        print(f"\nDEBUG: world.random_state() done. start = {[round(x, 4) for x in start]}")
 
         robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
         problem, vars, params = motion_planning(world, robot)
@@ -386,13 +379,11 @@ def run_simulations(num_iters, plot_steps):
             u_sol = input.value
             bl_sol = [boxes_low[i].value for i in range(world.MAX)]
             bu_sol = [boxes_upp[i].value for i in range(world.MAX)]
-            
-            world.solutions.append([start, robot.state, bl_sol, bu_sol])
-
 
             # Collect solutions in world & robot
-            if u_sol is not None:
-                robot.update_state(u_sol[0][0], u_sol[1][0])
+            world.solutions.append([start, robot.state, bl_sol, bu_sol])
+
+            robot.update_state(u_sol[0][0], u_sol[1][0])
             # 1st value in arr(  x_accel  ,   y_accel  )
             if plot_steps:
                 world.plot_problem(x_sol, start, goal0)
@@ -401,4 +392,4 @@ def run_simulations(num_iters, plot_steps):
         world.plot_problem(robot.state_traj, start, goal0)
 
 # FIXME: robot.state will clip into the edge of an obstacle, making u_sol invalid
-run_simulations(num_iters=1, plot_steps=True) # Make this true to see every plot
+run_simulations(num_iters=1, plot_steps=False) # Make this true to see every plot
