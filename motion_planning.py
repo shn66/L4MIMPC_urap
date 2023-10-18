@@ -4,7 +4,7 @@ import numpy as np
 import cvxpy as cp
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-
+import pdb
 
 class Obstacle_Map:
     """
@@ -43,7 +43,7 @@ class Obstacle_Map:
         lower_y, size_y = items_y
 
         self.lower_arr[0].append(lower_x)
-        self.size_arr [0].append(round(size_x, 2))
+        self.size_arr [0].append(round(size_x, 4))
         self.lower_arr[1].append(lower_y)
         self.size_arr [1].append(size_y)
     
@@ -108,7 +108,7 @@ class Environment:
                     in_obs = True                 # if inside walls of obs
                     break                         # break to get new state
             if not in_obs:                        # else return this state
-                return [round(x, 2), round(y, 2), 0.0, 0.0]
+                return [round(x, 4), round(y, 4), 0.0, 0.0]
 
         print("\nERROR: random_state() couldn't find valid state"); exit()
 
@@ -197,7 +197,8 @@ class Robot:
         vel_y += acc_y * t # v = v0 + a * t
         
         new_state  = [pos_x, pos_y, vel_x, vel_y] # assign new state array
-        self.state = [round(s, 2) for s in new_state]
+        # self.state = [round(s, 4) for s in new_state]
+        self.state = [s for s in new_state]
 
         for i in range(4):                        # write calculated state
             self.state_traj[i].append(self.state[i])
@@ -241,9 +242,9 @@ def motion_planning(world, robot):
 
 #### Robot constraints ####
     ## SEE SCREENSHOT 2 ##
-    Q = 1000 * np.identity(dim_state)
-    R = 50   * np.identity(dim_input)
-    N = 100
+    Q = 100 * np.identity(dim_state)  # originally 1000
+    R = 50  * np.identity(dim_input)
+    N = 50
     
 ## Vars & Parameters
     
@@ -283,7 +284,7 @@ def motion_planning(world, robot):
     boxes_upp = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)] # BOXES_UPP IS B_U
 
     # FIXME: Big-M hardcoded to 2 * upper_limit_x, 2 * upper_limit_y
-    M = np.diag([2 * limit_u[0], 2 * limit_u[1]])
+    M = np.diag([limit_u[0], 2 * limit_u[1]])
     
     constraints = [state[:, 0] == state0] # initial state constraint
     objective = 0
@@ -301,11 +302,13 @@ def motion_planning(world, robot):
         # big-M formulation of obstacle avoidance constraints
         for i in range(world.MAX):
 
-            constraints += [
-                state[0:2, k + 1] <= obs_lower[:, i] + M @ boxes_low[i][:, k],
-                state[0:2, k + 1] >= obs_upper[:, i] - M @ boxes_upp[i][:, k],
+            if k > 1:
+                constraints += [
+                    state[0:2, k + 1] <= obs_lower[:, i] + M @ boxes_low[i][:, k],
+                    state[0:2, k + 1] >= obs_upper[:, i] - M @ boxes_upp[i][:, k]]
 
-                # IF YOU SATISFY ALL 4 OF BOX'S CONSTRAINTS, YOURE IN THE BOX.
+            # IF YOU SATISFY ALL 4 OF BOX'S CONSTRAINTS, YOURE IN THE BOX.
+            constraints += [
                 boxes_low[i][0, k] + boxes_low[i][1, k] + boxes_upp[i][0, k] + boxes_upp[i][1, k] <= 3]
 
         ## SEE SCREENSHOT 2 ##
@@ -343,7 +346,7 @@ def run_simulations(num_iters, plot_steps):
         start = world.random_state(bound = 0.5)
         print(f"\nDEBUG: world.random_state() done. start = {start}")
 
-        robot = Robot(start, global_obs, TIME=0.2, FOV=5.0)
+        robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
         problem, vars, params = motion_planning(world, robot)
 
         state, input, boxes_low, boxes_upp = vars
