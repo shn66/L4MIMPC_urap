@@ -398,4 +398,4 @@ def run_simulations(num_iters, plot_steps):
         world.plot_problem(robot.state_traj, start, goal0)
 
 # FIXME: robot.state will clip into the edge of an obstacle, making u_sol invalid
-run_simulations(num_iters=1, plot_steps=False) # Make this true to see every plot
+run_simulations(num_iters=1, plot_steps=True) # Make this true to see every plot
