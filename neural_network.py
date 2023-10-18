@@ -35,7 +35,7 @@ def softmax_cross_en():
     print(f"loss numpy: {loss_np:.3f}")
 
     loss_py = nn.CrossEntropyLoss()
-    y = torch.tensor([0]) # NOT 1HE, use[0]
+    y = torch.tensor([0]) # NOT 1-hot, use[0]
 
     # size = samples * classes = 1x3
     y_pred = torch.tensor([[2.0, 1.0, 0.1]])
