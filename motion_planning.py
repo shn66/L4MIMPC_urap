@@ -36,19 +36,18 @@ class Obstacle_Map:
     def insert(self, items_x, items_y): # items_# = (lower_#, size_#)
         lower_x, size_x = items_x
         lower_y, size_y = items_y
-        size_x = round(size_x, 4)
 
-        def is_duplicate():
-            for i in range(len(self.lower_arr[0])):
+        found = False
+        for i in range(len(self.lower_arr[0])):
+            
+            # check all 4 vals at index i
+            if (lower_x == self.lower_arr[0][i] and
+                lower_y == self.lower_arr[1][i] and
+                size_x == self.size_arr[0][i] and
+                size_y == self.size_arr[1][i]):
+                found = True
 
-                if (lower_x == self.lower_arr[0][i] and
-                    lower_y == self.lower_arr[1][i] and
-                    size_x == self.size_arr[0][i] and
-                    size_y == self.size_arr[1][i]):
-                    return True
-            return False
-
-        if not is_duplicate():
+        if not found: # append all 4 vals to arrays
             self.lower_arr[0].append(lower_x)
             self.lower_arr[1].append(lower_y)
             self.size_arr[0].append(size_x)
@@ -105,7 +104,7 @@ class Environment:
                     in_obs = True                 # if inside walls of obs
                     break                         # break to get new state
             if not in_obs:                        # else return this state
-                return [round(x, 4), round(y, 4), 0.0, 0.0]
+                return [x, y, 0.0, 0.0]
 
         print("\nERROR: random_state() couldn't find valid state"); exit()
 
@@ -170,17 +169,17 @@ class Robot:
                 # add unchanged vals ((      x_items      ), (       y_items       ))
             continue
 
-            # The code below is temporary but we're not calling self.local_obs.clean()
-            if (in_FOV(obs_lower) or in_FOV(obs_upper)):  # FOV partially captures obs
+            # TEMP CODE. Deleted Obs_Map.clean()
+            if (in_FOV(obs_lower) or in_FOV(obs_upper)): # FOV partially captures obs
 
-                new_lower = min(obs_lower, x + self.FOV)  # new lower and upper coords
-                new_upper = min(obs_upper, x + self.FOV)  # min(obs_corner, FOVs edge)
+                new_lower = min(obs_lower, x + self.FOV) # new lower and upper coords
+                new_upper = min(obs_upper, x + self.FOV) # min(obs_corner, FOVs edge)
 
-                new_size = new_upper - new_lower          # new size_x = upper - lower
+                new_size = new_upper - new_lower         # new size_x = upper - lower
                 self.local_obs.insert((new_lower, new_size), (lower_y[i], size_y[i]))
                 # add modified vals  ((      x_items      ), (       y_items       ))
 
-        print(f"\nDEBUG: detect_obs() done. local_obs:\n{self.local_obs}")
+        print(f"\nDEBUG: detect_obs() done. local_obs:\n{[round(x, 4) for x in self.local_obs]}")
     
 
     def update_state(self, acc_x, acc_y):
@@ -192,10 +191,7 @@ class Robot:
         vel_x += acc_x * t # x = x0 + v * t + 0.5(a * t^2)
         vel_y += acc_y * t # v = v0 + a * t
         
-        new_state  = [pos_x, pos_y, vel_x, vel_y] # assign new state array
-        # self.state = [round(s, 4) for s in new_state]
-        self.state = [s for s in new_state]
-
+        self.state = [pos_x, pos_y, vel_x, vel_y] # assign new state array
         for i in range(4):                        # write calculated state
             self.state_traj[i].append(self.state[i])
 
@@ -341,7 +337,7 @@ def run_simulations(num_iters, plot_steps):
     for _ in range(num_iters):
 
         start = world.random_state(bound = 0.5)
-        print(f"\nDEBUG: world.random_state() done. start = {start}")
+        print(f"\nDEBUG: world.random_state() done. start = {[round(x, 4) for x in start]}")
 
         robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
         problem, vars, params = motion_planning(world, robot)
