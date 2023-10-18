@@ -31,37 +31,34 @@ class Obstacle_Map:
                     break 
         if case != 0:
             print(f"\nERROR: Obs_Map.init() failed @ case {case}"); exit()
-    
 
-    def unwrap(self): # return (x_l, x_s, y_l, y_s)
-        lower = self.lower_arr
-        size = self.size_arr
-        return lower[0], size[0], lower[1], size[1]
 
     def insert(self, items_x, items_y): # items_# = (lower_#, size_#)
         lower_x, size_x = items_x
         lower_y, size_y = items_y
+        size_x = round(size_x, 4)
 
-        self.lower_arr[0].append(lower_x)
-        self.size_arr [0].append(round(size_x, 4))
-        self.lower_arr[1].append(lower_y)
-        self.size_arr [1].append(size_y)
+        def is_duplicate():
+            for i in range(len(self.lower_arr[0])):
+
+                if (lower_x == self.lower_arr[0][i] and
+                    lower_y == self.lower_arr[1][i] and
+                    size_x == self.size_arr[0][i] and
+                    size_y == self.size_arr[1][i]):
+                    return True
+            return False
+
+        if not is_duplicate():
+            self.lower_arr[0].append(lower_x)
+            self.lower_arr[1].append(lower_y)
+            self.size_arr[0].append(size_x)
+            self.size_arr[1].append(size_y)
+
     
-
-    def clean(self): # remove duplicate coordinates
-        def cln(arr):
-            x_arr, y_arr = [], []
-            seen = set()
-            
-            for x, y in zip(arr[0], arr[1]):
-                if (x, y) not in seen:
-                    seen.add((x, y))
-                    x_arr.append(x)
-                    y_arr.append(y)
-            return [x_arr, y_arr]
-        
-        self.lower_arr = cln(self.lower_arr)
-        self.size_arr = cln(self.size_arr)
+    def unwrap(self): # return (x_l, x_s, y_l, y_s)
+        lower = self.lower_arr
+        size = self.size_arr
+        return lower[0], size[0], lower[1], size[1]
     
     def __str__(self):
         return f"lower_arr = {self.lower_arr}\nsize_arr = {self.size_arr}"
@@ -173,7 +170,7 @@ class Robot:
                 # add unchanged vals ((      x_items      ), (       y_items       ))
             continue
 
-            # The code below is mutually exclusive with calling self.local_obs.clean()
+            # The code below is temporary but we're not calling self.local_obs.clean()
             if (in_FOV(obs_lower) or in_FOV(obs_upper)):  # FOV partially captures obs
 
                 new_lower = min(obs_lower, x + self.FOV)  # new lower and upper coords
@@ -183,7 +180,6 @@ class Robot:
                 self.local_obs.insert((new_lower, new_size), (lower_y[i], size_y[i]))
                 # add modified vals  ((      x_items      ), (       y_items       ))
 
-        self.local_obs.clean() # remove duplicate coordinates
         print(f"\nDEBUG: detect_obs() done. local_obs:\n{self.local_obs}")
     
 
@@ -400,4 +396,4 @@ def run_simulations(num_iters, plot_steps):
         world.plot_problem(robot.state_traj, start, goal0)
 
 # FIXME: robot.state will clip into the edge of an obstacle, making u_sol invalid
-run_simulations(num_iters=1, plot_steps=True) # Make this true to see every plot
+run_simulations(num_iters=1, plot_steps=False) # Make this true to see every plot
