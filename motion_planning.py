@@ -1,3 +1,4 @@
+import os
 import copy
 import random
 import numpy as np
@@ -80,8 +81,8 @@ class Environment:
         self.MAX = MAX
 
         self.global_obs = global_obs
-        self.solutions = [] # [[state0, robot.state, bl_sol, bu_sol] ...]
-        self.trajects  = [] # [[start, goal0, state_traj, input_traj]...]
+        self.solutions = [] # [[state0, robot.state, bl_sol, bu_sol], ...]
+        self.trajects  = [] # [[start, goal, state_traj, input_traj], ...]
 
 
     def random_state(self, bound):
@@ -130,6 +131,25 @@ class Environment:
                 obs_size[0][i], obs_size[1][i], ec='r', fc='r', label=label))
         plt.legend(loc = 4)
         plt.show()
+
+
+    def export_files(self):
+        ex = not os.path.exists('data')
+        if ex: os.makedirs('data')
+
+        sols = open('data/solutions.txt', 'a')
+        if ex: sols.write("state0; robot.state; bl_sol; bu_sol\n")
+
+        sols.write('\n')
+        for x in self.solutions:
+            sols.write('; '.join(map(str, x)) + '\n')
+        
+        traj = open('data/trajects.txt', 'a')
+        if ex: traj.write("start; goal; state_traj; input_traj\n")
+
+        traj.write('\n')
+        for x in self.trajects:
+            traj.write('; '.join(map(str, x)) + '\n')
 
 
 class Robot:
@@ -204,7 +224,6 @@ def motion_planning(world, robot):
     ## SEE SCREENSHOT 1 ##
     dt = robot.TIME
 
-    # State updates described by A and B should match Robot.update_state()
     A = np.matrix(
        [[1, 0, dt, 0],
         [0, 1, 0, dt],
@@ -223,7 +242,7 @@ def motion_planning(world, robot):
 
 #### Robot constraints ####
     ## SEE SCREENSHOT 2 ##
-    Q = 100 * np.identity(dim_state)  # originally 1000
+    Q = 100 * np.identity(dim_state)
     R = 50  * np.identity(dim_input)
     N = 50
     
@@ -341,7 +360,7 @@ def run_simulations(num_iters, plot_period, plot_steps):
         # Initialize all CP parameter values
         while diff(goal) > TOL: # while not at goal
 
-            print(f"\nDEBUG: |distance| to goal: {round(diff(goal), 2)}")
+            print(f"DEBUG: abs(distance) to goal: {round(diff(goal), 2)}")
 
             state0.value = np.array(robot.state)
             goal0.value = np.array(goal)
@@ -366,25 +385,32 @@ def run_simulations(num_iters, plot_period, plot_steps):
             print(f"Optimal cost = {problem.value}")
             print(f"Solve time {problem.solver_stats.solve_time} seconds")
 
-
             x_sol = state.value
             u_sol = input.value
-            bl_sol = [boxes_low[i].value for i in range(world.MAX)]
-            bu_sol = [boxes_upp[i].value for i in range(world.MAX)]
+            bl_sol, bu_sol = [], []
 
+
+            for i in range(world.MAX): # float -> int; np.array -> list
+                bl_sol.append(boxes_low[i].value.astype(int).tolist())
+                bu_sol.append(boxes_upp[i].value.astype(int).tolist())
+
+            step = len(robot.state_traj[0]) - 1
             robot.update_state(u_sol[0][0], u_sol[1][0])
             # 1st value in arr(  x_accel  ,   y_accel  )
-            step = len(robot.state_traj[0]) - 1
 
             if step % plot_period == 0: # every p_p steps:
                 # collect intermediate solutions in world
-                world.solutions.append([state0.value, robot.state, bl_sol, bu_sol])
+                world.solutions.append([state0.value.tolist(), robot.state, bl_sol, bu_sol])
+
                 if plot_steps:
                     world.plot_problem(x_sol, start, goal)
         
         # collect final solution in world.trajects
         world.trajects.append([start, goal, robot.state_traj, robot.input_traj])
-        world.plot_problem(np.array(robot.state_traj), start, goal)
+        if plot_steps:
+            world.plot_problem(np.array(robot.state_traj), start, goal)
+
+        world.export_files()
 
 # Enter plot_steps=True to view graph every plot_period steps
-run_simulations(num_iters=1, plot_period=10, plot_steps=True)
+run_simulations(num_iters=1, plot_period=10, plot_steps=False)
