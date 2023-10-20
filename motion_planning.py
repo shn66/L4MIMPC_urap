@@ -213,7 +213,7 @@ class Robot:
         print(f"\nDEBUG: update_state() done = {[round(x, 2) for x in self.state]}")
 
 
-def motion_planning(world, robot):
+def motion_planning(world, robot, relaxed):
     """
     Inputs:
     obs_size:   2 x num_obs array, describing width and height of the obstacles, num_obs = # of obstacles
@@ -285,8 +285,15 @@ def motion_planning(world, robot):
 #### Obstacle avoidance ####
 
     # Declaring binary variables for obstacle avoidance formulation
-    bool_low = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)]
-    bool_upp = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)]
+    bool_low, bool_upp = [], []
+    for _ in range(world.MAX):
+
+        if relaxed:
+            bool_low.append(cp.Parameter((2, N), boolean=True))
+            bool_upp.append(cp.Parameter((2, N), boolean=True))
+        else:
+            bool_low.append(cp.Variable((2, N), boolean=True))
+            bool_upp.append(cp.Variable((2, N), boolean=True))
 
     # DONE: Big-M hardcoded to 2 * upper_limit_x, 2 * upper_limit_y
     M = np.diag([2 * limit_u[0], 2 * limit_u[1]])
@@ -325,8 +332,12 @@ def motion_planning(world, robot):
     # Define the motion planning problem
     problem = cp.Problem(cp.Minimize(objective), constraints)
 
-    print(f"\nDEBUG: motion_planning() done. return problem, vars, param")
-    return problem, (state, input, bool_low, bool_upp), (state0, goal0, obs_lower, obs_upper)
+    print(f"\nDEBUG: motion_planning() done. return problem, vars, params")
+
+    if relaxed:
+        return problem, (state, input), (bool_low, bool_upp, state0, goal0, obs_lower, obs_upper)
+    else:
+        return problem, (state, input, bool_low, bool_upp), (state0, goal0, obs_lower, obs_upper)
 
 
 def run_simulations(num_iters, plot_period, plot_steps):
@@ -346,13 +357,13 @@ def run_simulations(num_iters, plot_period, plot_steps):
     world = Environment(limit, goal, global_obs, MAX=len(global_obs), TOL=0.1)
 
     # Randomize start, get vars & params
-    for iter in range(50, num_iters):
+    for iter in range(num_iters):
 
         start = world.random_state(bound = 0.5)
         print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
 
         robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
-        problem, vars, params = motion_planning(world, robot)
+        problem, vars, params = motion_planning(world, robot, relaxed=False)
 
         state, input, bool_low, bool_upp = vars
         state0, goal0, obs_lower, obs_upper = params
@@ -390,10 +401,11 @@ def run_simulations(num_iters, plot_period, plot_steps):
 
             x_sol = state.value
             u_sol = input.value
+
+
             bl_sol, bu_sol = [], []
-
-
             for i in range(world.MAX): # float -> int; np.array -> lst
+
                 bl_sol.append(bool_low[i].value.astype(int).tolist())
                 bu_sol.append(bool_upp[i].value.astype(int).tolist())
 
@@ -417,4 +429,4 @@ def run_simulations(num_iters, plot_period, plot_steps):
         world.export_files(iter) # write world arrays into text files
 
 # Enter plot_steps=True to view graph every plot_period steps
-run_simulations(num_iters=50, plot_period=10, plot_steps=False)
+run_simulations(num_iters=100, plot_period=10, plot_steps=False)
