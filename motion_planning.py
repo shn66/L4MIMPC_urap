@@ -4,7 +4,6 @@ import numpy as np
 import cvxpy as cp
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-import pdb
 
 class Obstacle_Map:
     """
@@ -81,14 +80,14 @@ class Environment:
         self.MAX = MAX
 
         self.global_obs = global_obs
-        self.solutions = [] # [[start, robot.state, bl_sol, bu_sol], [...] ...]
-        self.trajects  = [] # [[start, goal0, state_traj, input_traj], [ ] ...]
+        self.solutions = [] # [[state0, robot.state, bl_sol, bu_sol] ...]
+        self.trajects  = [] # [[start, goal0, state_traj, input_traj]...]
 
 
     def random_state(self, bound):
         lower, upper = self.limit # unpack list -> 2 vars
 
-        for _ in range(100):                           # random starting state
+        for _ in range(100):                           # random starting state,
             x = random.uniform(lower[0], upper[0] * bound) # in x_width * bound
             y = random.uniform(lower[1], upper[1])     # arr[0] = x, arr[1] = y
 
@@ -167,18 +166,7 @@ class Robot:
             if (in_FOV(obs_lower) or in_FOV(obs_upper)): # FOV fully capture obstacle
                 self.local_obs.insert((obs_lower, obs_size), (lower_y[i], size_y[i]))
                 # add unchanged vals ((      x_items      ), (       y_items       ))
-            continue
-
-            # TEMP CODE. Deleted Obs_Map.clean()
-            if (in_FOV(obs_lower) or in_FOV(obs_upper)): # FOV partially captures obs
-
-                new_lower = min(obs_lower, x + self.FOV) # new lower and upper coords
-                new_upper = min(obs_upper, x + self.FOV) # min(obs_corner, FOVs edge)
-
-                new_size = new_upper - new_lower         # new size_x = upper - lower
-                self.local_obs.insert((new_lower, new_size), (lower_y[i], size_y[i]))
-                # add modified vals  ((      x_items      ), (       y_items       ))
-
+        return
         print(f"\nDEBUG: detect_obs() done. local_obs:\n{self.local_obs}")
     
 
@@ -198,7 +186,7 @@ class Robot:
         self.input_traj[0].append(acc_x) # write given input vals
         self.input_traj[1].append(acc_y)
 
-        print(f"\nDEBUG: update_state() done. Robot.state:\n{self.state}")
+        print(f"\nDEBUG: update_state() done = {[round(x, 2) for x in self.state]}")
 
 
 def motion_planning(world, robot):
@@ -216,17 +204,18 @@ def motion_planning(world, robot):
     ## SEE SCREENSHOT 1 ##
     dt = robot.TIME
 
+    # State updates described by A and B should match Robot.update_state()
     A = np.matrix(
-        [[1, 0, dt,0],
-         [0, 1, 0,dt],
-         [0, 0, 1, 0],
-         [0, 0, 0, 1]])
+       [[1, 0, dt, 0],
+        [0, 1, 0, dt],
+        [0, 0, 1,  0],
+        [0, 0, 0,  1]])
     
     B = dt * np.matrix(
-        [[0, 0],
-         [0, 0],
-         [1, 0],
-         [0, 1]])
+       [[0.5*dt, 0     ],
+        [0,      0.5*dt],
+        [1,      0     ],
+        [0,      1     ]])
     
     dim_state = A.shape[1]
     dim_input = B.shape[1]
@@ -246,7 +235,7 @@ def motion_planning(world, robot):
 
     # Declare parameters for state0, goal, and obstacles
     state0 = cp.Parameter(dim_state) # state0, goal have
-    goal   = cp.Parameter(dim_state) # arrays of len = 4
+    goal0  = cp.Parameter(dim_state) # arrays of len = 4
 
     obs_lower = cp.Parameter((2, world.MAX)) # rows = 2 for x and y array
     obs_upper = cp.Parameter((2, world.MAX)) # cols = world.MAX of all obs
@@ -257,8 +246,9 @@ def motion_planning(world, robot):
     limit_l = world.limit[0] # lower arr[pos_x, pos_y,
     limit_u = world.limit[1] # upper arr vel_x, vel_y]
 
-    lower_x = cp.vstack([x] + limit_l[1:])             # arr[pos, -5, -1, -1]
-    upper_x = cp.vstack([x + robot.FOV] + limit_u[1:]) # arr[pos+FOV, 5, 1, 1]
+    lower_x = cp.vstack([x - 0.1] + limit_l[1:])      # arr[pos, -5, -1, -1]
+    min_arr = [cp.minimum(x + robot.FOV, limit_u[0])] # min(pos+FOV, upp[0])
+    upper_x = cp.vstack(min_arr + limit_u[1:])        # arr[pos+FOV, 5, 1, 1]
 
     lower_x = lower_x[:, 0]      # real scuffed solution
     upper_x = upper_x[:, 0]      # .shape (4, 1) to (4,)
@@ -275,8 +265,8 @@ def motion_planning(world, robot):
     boxes_low = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)] # BOXES_LOW IS B_L
     boxes_upp = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)] # BOXES_UPP IS B_U
 
-    # FIXME: Big-M hardcoded to 2 * upper_limit_x, 2 * upper_limit_y
-    M = np.diag([limit_u[0], 2 * limit_u[1]])
+    # DONE: Big-M hardcoded to 2 * upper_limit_x, 2 * upper_limit_y
+    M = np.diag([2 * limit_u[0], 2 * limit_u[1]])
     
     constraints = [state[:, 0] == state0] # initial state constraint
     objective = 0
@@ -290,14 +280,13 @@ def motion_planning(world, robot):
     
         constraints += [lower_u <= input[:, k], upper_u >= input[:, k]]         # adding input constraints
 
-
         # big-M formulation of obstacle avoidance constraints
         for i in range(world.MAX):
 
-            if k > 1:
-                constraints += [
-                    state[0:2, k + 1] <= obs_lower[:, i] + M @ boxes_low[i][:, k],
-                    state[0:2, k + 1] >= obs_upper[:, i] - M @ boxes_upp[i][:, k]]
+            constraints += [
+                state[0:2, k + 1] <= obs_lower[:, i] + M @ boxes_low[i][:, k],
+                state[0:2, k + 1] >= obs_upper[:, i] - M @ boxes_upp[i][:, k]]
+            
 
             # IF YOU SATISFY ALL 4 OF BOX'S CONSTRAINTS, YOURE IN THE BOX.
             constraints += [
@@ -305,19 +294,19 @@ def motion_planning(world, robot):
 
         ## SEE SCREENSHOT 2 ##
         # calculating cumulative cost
-        objective += cp.norm(Q @ (state[:, k] - goal), 'inf') + cp.norm(R @ input[:, k], 'inf') 
+        objective += cp.norm(Q @ (state[:, k] - goal0), 'inf') + cp.norm(R @ input[:, k], 'inf') 
     
     # adding extreme penalty on terminal state to encourage getting close to the goal
-    objective += 100 * cp.norm(Q @ (state[:, -1] - goal), 'inf')
+    objective += 100 * cp.norm(Q @ (state[:, -1] - goal0), 'inf')
 
     # Define the motion planning problem
     problem = cp.Problem(cp.Minimize(objective), constraints)
 
-    print(f"\nDEBUG: motion_planning() done. return problem, vars, params")
-    return problem, (state, input, boxes_low, boxes_upp), (state0, goal, obs_lower, obs_upper)
+    print(f"\nDEBUG: motion_planning() done. return problem, vars, param")
+    return problem, (state, input, boxes_low, boxes_upp), (state0, goal0, obs_lower, obs_upper)
 
 
-def run_simulations(num_iters, plot_steps):
+def run_simulations(num_iters, plot_period, plot_steps):
     # Create the motion planning problem
 
     lower_arr = [[0.0, 2.0, 2.0, 5.0, 7.5, 10.0, 12.0, 12.0, 15.0, 17.5], # x coords
@@ -326,34 +315,36 @@ def run_simulations(num_iters, plot_steps):
     size_arr  = [[1.5, 2.5, 2.5, 2.0, 2.0, 1.5, 2.5, 2.5, 2.0, 2.0],      # width: x
                  [2.0, 7.0, 2.0, 6.5, 6.0, 2.0, 7.0, 2.0, 6.5, 6.0]]      # height:y
     
-    goal0 =  [20.0, 0.0, 0.0, 0.0]
+    goal =   [20.0, 0.0, 0.0, 0.0]
     limit = [[0.0, -4.9,-1.0,-1.0], # lower[pos_x, pos_y,
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
     
     global_obs = Obstacle_Map(lower_arr, size_arr)
-    world = Environment(limit, goal0, global_obs, MAX = 10)
+    world = Environment(limit, goal, global_obs, MAX = 10)
 
     # Randomize start, get vars & params
     for _ in range(num_iters):
 
         start = world.random_state(bound = 0.5)
-        print(f"\nDEBUG: world.random_state() done. start = {[round(x, 4) for x in start]}")
+        print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
 
         robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
         problem, vars, params = motion_planning(world, robot)
 
         state, input, boxes_low, boxes_upp = vars
-        state0, goal, obs_lower, obs_upper = params
+        state0, goal0, obs_lower, obs_upper = params
 
-        diff = np.array(robot.state) - np.array(goal0)
-        TOL = 0.01
+        diff = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
+        TOL = 0.1 # 0.01 is too small
 
-
+  
         # Initialize all CP parameter values
-        while np.linalg.norm(diff) > TOL: # while not @ goal
+        while diff(goal) > TOL: # while not at goal
+
+            print(f"\nDEBUG: |distance| to goal: {round(diff(goal), 2)}")
 
             state0.value = np.array(robot.state)
-            goal.value = np.array(goal0)
+            goal0.value = np.array(goal)
 
             robot.detect_obs()
             l = copy.deepcopy(robot.local_obs.lower_arr)
@@ -373,23 +364,27 @@ def run_simulations(num_iters, plot_steps):
 
             print(f"Status = {problem.status}")
             print(f"Optimal cost = {problem.value}")
-            print(f"Solve time = {problem.solver_stats.solve_time} seconds")
+            print(f"Solve time {problem.solver_stats.solve_time} seconds")
+
 
             x_sol = state.value
             u_sol = input.value
             bl_sol = [boxes_low[i].value for i in range(world.MAX)]
             bu_sol = [boxes_upp[i].value for i in range(world.MAX)]
 
-            # Collect solutions in world & robot
-            world.solutions.append([start, robot.state, bl_sol, bu_sol])
-
             robot.update_state(u_sol[0][0], u_sol[1][0])
             # 1st value in arr(  x_accel  ,   y_accel  )
-            if plot_steps:
-                world.plot_problem(x_sol, start, goal0)
-        
-        world.trajects.append([start, goal0, robot.state_traj, robot.input_traj])
-        world.plot_problem(robot.state_traj, start, goal0)
+            step = len(robot.state_traj[0]) - 1
 
-# FIXME: robot.state will clip into the edge of an obstacle, making u_sol invalid
-run_simulations(num_iters=1, plot_steps=True) # Make this true to see every plot
+            if step % plot_period == 0: # every p_p steps:
+                # collect intermediate solutions in world
+                world.solutions.append([state0.value, robot.state, bl_sol, bu_sol])
+                if plot_steps:
+                    world.plot_problem(x_sol, start, goal)
+        
+        # collect final solution in world.trajects
+        world.trajects.append([start, goal, robot.state_traj, robot.input_traj])
+        world.plot_problem(np.array(robot.state_traj), start, goal)
+
+# Enter plot_steps=True to view graph every plot_period steps
+run_simulations(num_iters=1, plot_period=10, plot_steps=True)
