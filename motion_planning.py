@@ -68,17 +68,18 @@ class Obstacle_Map:
 
 class Environment:
     """
-    limit = [[0.0, -5.0,-1.0,-1.0], # lower[pos_x, pos_y,
-             [20.0, 5.0, 1.0, 1.0]] # upper vel_x, vel_y]
+    limit = [[0.0, -4.9,-1.0,-1.0], # lower[pos_x, pos_y,
+             [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
     goal = [x_pos, y_pos, x_vel, y_vel]
 
     global_obs = Obstacle_Map()
     MAX = integer, max # of obs
     """
-    def __init__(self, limit, goal, global_obs, MAX):
+    def __init__(self, limit, goal, global_obs, MAX, TOL):
         self.limit = limit
         self.goal = goal
         self.MAX = MAX
+        self.TOL = TOL
 
         self.global_obs = global_obs
         self.solutions = [] # [[state0, robot.state, bl_sol, bu_sol], ...]
@@ -133,23 +134,26 @@ class Environment:
         plt.show()
 
 
-    def export_files(self):
-        ex = not os.path.exists('data')
-        if ex: os.makedirs('data')
+    def export_files(self, iter):
+        ex = not os.path.exists("data")
+        if ex: os.makedirs("data")
 
-        sols = open('data/solutions.txt', 'a')
+        sols = open("data/solutions.txt", "a")
         if ex: sols.write("state0; robot.state; bl_sol; bu_sol\n")
 
-        sols.write('\n')
+        sols.write(f"{iter}:\n")
         for x in self.solutions:
-            sols.write('; '.join(map(str, x)) + '\n')
+            sols.write("; ".join(map(str, x)) + "\n")
         
-        traj = open('data/trajects.txt', 'a')
+        traj = open("data/trajects.txt", "a")
         if ex: traj.write("start; goal; state_traj; input_traj\n")
 
-        traj.write('\n')
+        traj.write(f"{iter}:\n")
         for x in self.trajects:
-            traj.write('; '.join(map(str, x)) + '\n')
+            traj.write('; '.join(map(str, x)) + "\n")
+
+        self.solutions = []
+        self.trajects = []
 
 
 class Robot:
@@ -265,9 +269,9 @@ def motion_planning(world, robot):
     limit_l = world.limit[0] # lower arr[pos_x, pos_y,
     limit_u = world.limit[1] # upper arr vel_x, vel_y]
 
-    lower_x = cp.vstack([x - 0.1] + limit_l[1:])      # arr[pos, -5, -1, -1]
-    min_arr = [cp.minimum(x + robot.FOV, limit_u[0])] # min(pos+FOV, upp[0])
-    upper_x = cp.vstack(min_arr + limit_u[1:])        # arr[pos+FOV, 5, 1, 1]
+    lower_x = cp.vstack([x - world.TOL] + limit_l[1:]) # arr[pos-TOL,-5,-1,-1]
+    upp_fov = cp.minimum(x + robot.FOV, limit_u[0])    # min(pos+FOV, lim_u[0])
+    upper_x = cp.vstack([upp_fov] + limit_u[1:])       # arr[upp_fov, 5, 1, 1]
 
     lower_x = lower_x[:, 0]      # real scuffed solution
     upper_x = upper_x[:, 0]      # .shape (4, 1) to (4,)
@@ -281,8 +285,8 @@ def motion_planning(world, robot):
 #### Obstacle avoidance ####
 
     # Declaring binary variables for obstacle avoidance formulation
-    boxes_low = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)] # BOXES_LOW IS B_L
-    boxes_upp = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)] # BOXES_UPP IS B_U
+    bool_low = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)]
+    bool_upp = [cp.Variable((2, N), boolean=True) for _ in range(world.MAX)]
 
     # DONE: Big-M hardcoded to 2 * upper_limit_x, 2 * upper_limit_y
     M = np.diag([2 * limit_u[0], 2 * limit_u[1]])
@@ -303,13 +307,13 @@ def motion_planning(world, robot):
         for i in range(world.MAX):
 
             constraints += [
-                state[0:2, k + 1] <= obs_lower[:, i] + M @ boxes_low[i][:, k],
-                state[0:2, k + 1] >= obs_upper[:, i] - M @ boxes_upp[i][:, k]]
+                state[0:2, k + 1] <= obs_lower[:, i] + M @ bool_low[i][:, k],
+                state[0:2, k + 1] >= obs_upper[:, i] - M @ bool_upp[i][:, k]]
             
 
-            # IF YOU SATISFY ALL 4 OF BOX'S CONSTRAINTS, YOURE IN THE BOX.
+            # IF YOU SATISFY ALL 4 OF OBS'S CONSTRAINTS, YOURE IN THE OBS.
             constraints += [
-                boxes_low[i][0, k] + boxes_low[i][1, k] + boxes_upp[i][0, k] + boxes_upp[i][1, k] <= 3]
+                bool_low[i][0, k] + bool_low[i][1, k] + bool_upp[i][0, k] + bool_upp[i][1, k] <= 3]
 
         ## SEE SCREENSHOT 2 ##
         # calculating cumulative cost
@@ -322,7 +326,7 @@ def motion_planning(world, robot):
     problem = cp.Problem(cp.Minimize(objective), constraints)
 
     print(f"\nDEBUG: motion_planning() done. return problem, vars, param")
-    return problem, (state, input, boxes_low, boxes_upp), (state0, goal0, obs_lower, obs_upper)
+    return problem, (state, input, bool_low, bool_upp), (state0, goal0, obs_lower, obs_upper)
 
 
 def run_simulations(num_iters, plot_period, plot_steps):
@@ -339,10 +343,10 @@ def run_simulations(num_iters, plot_period, plot_steps):
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
     
     global_obs = Obstacle_Map(lower_arr, size_arr)
-    world = Environment(limit, goal, global_obs, MAX = 10)
+    world = Environment(limit, goal, global_obs, MAX=len(global_obs), TOL=0.1)
 
     # Randomize start, get vars & params
-    for _ in range(num_iters):
+    for iter in range(50, num_iters):
 
         start = world.random_state(bound = 0.5)
         print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
@@ -350,15 +354,14 @@ def run_simulations(num_iters, plot_period, plot_steps):
         robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
         problem, vars, params = motion_planning(world, robot)
 
-        state, input, boxes_low, boxes_upp = vars
+        state, input, bool_low, bool_upp = vars
         state0, goal0, obs_lower, obs_upper = params
 
         diff = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
-        TOL = 0.1 # 0.01 is too small
 
   
         # Initialize all CP parameter values
-        while diff(goal) > TOL: # while not at goal
+        while diff(goal) > world.TOL: # while not at goal
 
             print(f"DEBUG: abs(distance) to goal: {round(diff(goal), 2)}")
 
@@ -390,27 +393,28 @@ def run_simulations(num_iters, plot_period, plot_steps):
             bl_sol, bu_sol = [], []
 
 
-            for i in range(world.MAX): # float -> int; np.array -> list
-                bl_sol.append(boxes_low[i].value.astype(int).tolist())
-                bu_sol.append(boxes_upp[i].value.astype(int).tolist())
+            for i in range(world.MAX): # float -> int; np.array -> lst
+                bl_sol.append(bool_low[i].value.astype(int).tolist())
+                bu_sol.append(bool_upp[i].value.astype(int).tolist())
 
             step = len(robot.state_traj[0]) - 1
             robot.update_state(u_sol[0][0], u_sol[1][0])
             # 1st value in arr(  x_accel  ,   y_accel  )
 
-            if step % plot_period == 0: # every p_p steps:
-                # collect intermediate solutions in world
+            if step % plot_period == 0: # every PP steps
+                # collect intermediate sols in world
                 world.solutions.append([state0.value.tolist(), robot.state, bl_sol, bu_sol])
 
                 if plot_steps:
                     world.plot_problem(x_sol, start, goal)
         
-        # collect final solution in world.trajects
+        # collect final trajectory in world:
         world.trajects.append([start, goal, robot.state_traj, robot.input_traj])
+
         if plot_steps:
             world.plot_problem(np.array(robot.state_traj), start, goal)
 
-        world.export_files()
+        world.export_files(iter) # write world arrays into text files
 
 # Enter plot_steps=True to view graph every plot_period steps
-run_simulations(num_iters=1, plot_period=10, plot_steps=False)
+run_simulations(num_iters=50, plot_period=10, plot_steps=False)
