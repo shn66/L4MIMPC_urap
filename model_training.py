@@ -55,18 +55,18 @@ def relaxed_problem(dataset):
     size_arr  = [[1.5, 2.5, 2.5, 2.0, 2.0, 1.5, 2.5, 2.5, 2.0, 2.0],      # width: x
                  [2.0, 7.0, 2.0, 6.5, 6.0, 2.0, 7.0, 2.0, 6.5, 6.0]]      # height:y
     
-    goal  =  [20.0, 0.0, 0.0, 0.0]
+    # goal = [20.0, 0.0, 0.0, 0.0]
     limit = [[0.0, -4.9,-1.0,-1.0], # lower[pos_x, pos_y,
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
+    
+    i = random.randint(0, len(dataset.solutions) - 1)
+    start, goal, bl_sol, bu_sol = dataset.solutions[i]
     
     global_obs = mp.Obstacle_Map(lower_arr, size_arr)
     world = mp.Environment(limit, goal, global_obs, TOL=0.1)
 
     # Randomize start, get vars & params
     for _ in range(1):
-
-        i = random.randint(0, len(dataset.solutions) - 1)
-        start, final, bl_sol, bu_sol = dataset.solutions[i]
 
         robot = mp.Robot(start, global_obs, TIME=0.2, FOV=10.0)
         problem, vars, params = mp.motion_planning(world, robot, relaxed=True)
@@ -77,15 +77,15 @@ def relaxed_problem(dataset):
         diff = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
 
         # Initialize all CP parameter values
-        while diff(final) > world.TOL: # while not at goal
+        while diff(goal) > world.TOL: # while not at goal
 
-            print(f"DEBUG: abs(distance) to goal: {round(diff(final), 2)}")
+            print(f"DEBUG: abs(distance) to goal: {round(diff(goal), 2)}")
             
             # TODO: bool_low, bool_upp are parameters instead of variables
             # Pass them into relaxed problem & compare solns / solve times
 
             state0.value = np.array(start)
-            goal0.value  = np.array(final)
+            goal0.value  = np.array(goal)
             
             for i in range(len(bool_low)):
                 bool_low[i].value = np.array(bl_sol[i])
@@ -111,6 +111,12 @@ def relaxed_problem(dataset):
             print(f"Optimal cost = {int(problem.value)}")
             print(f"Solve time = {problem.solver_stats.solve_time} secs.")
 
+            x_sol = state.value
+            u_sol = input.value
+
+            robot.update_state(u_sol[0][0], u_sol[1][0])
+            # 1st value in arr(  x_accel  ,   y_accel  )
+            world.plot_problem(x_sol, start, goal)
 
 dataset = Dataset()
 relaxed_problem(dataset)
