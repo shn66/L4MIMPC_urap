@@ -75,13 +75,13 @@ class Environment:
     global_obs = Obstacle_Map()
     MAX = integer, max # of obs
     """
-    def __init__(self, limit, goal, global_obs, MAX, TOL):
+    def __init__(self, limit, goal, global_obs, TOL):
         self.limit = limit
         self.goal = goal
-        self.MAX = MAX
         self.TOL = TOL
-
         self.global_obs = global_obs
+        self.MAX = len(global_obs)
+
         self.solutions = [] # [[state0, final_state, bl_sol, bu_sol], ...]
         self.trajects  = [] # [[start, goal, state_traj, input_traj], ...]
 
@@ -349,12 +349,12 @@ def run_simulations(num_iters, plot_period, plot_steps):
     size_arr  = [[1.5, 2.5, 2.5, 2.0, 2.0, 1.5, 2.5, 2.5, 2.0, 2.0],      # width: x
                  [2.0, 7.0, 2.0, 6.5, 6.0, 2.0, 7.0, 2.0, 6.5, 6.0]]      # height:y
     
-    goal =   [20.0, 0.0, 0.0, 0.0]
+    goal  =  [20.0, 0.0, 0.0, 0.0]
     limit = [[0.0, -4.9,-1.0,-1.0], # lower[pos_x, pos_y,
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
     
     global_obs = Obstacle_Map(lower_arr, size_arr)
-    world = Environment(limit, goal, global_obs, MAX=len(global_obs), TOL=0.1)
+    world = Environment(limit, goal, global_obs, TOL=0.1)
 
     # Randomize start, get vars & params
     for iter in range(num_iters):
@@ -429,4 +429,4 @@ def run_simulations(num_iters, plot_period, plot_steps):
         world.export_files(iter) # write world arrays into text files
 
 # Enter plot_steps=True to view graph every plot_period steps
-run_simulations(num_iters=100, plot_period=10, plot_steps=False)
+# run_simulations(num_iters=100, plot_period=10, plot_steps=False)
