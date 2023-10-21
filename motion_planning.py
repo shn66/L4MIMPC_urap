@@ -82,7 +82,7 @@ class Environment:
         self.TOL = TOL
 
         self.global_obs = global_obs
-        self.solutions = [] # [[state0, robot.state, bl_sol, bu_sol], ...]
+        self.solutions = [] # [[state0, final_state, bl_sol, bu_sol], ...]
         self.trajects  = [] # [[start, goal, state_traj, input_traj], ...]
 
 
@@ -265,16 +265,16 @@ def motion_planning(world, robot, relaxed):
 
 ## State constraints
 
-    x = state0[0]            # state = [x_pos, y_pos,]
+    x = state0[0]
     limit_l = world.limit[0] # lower arr[pos_x, pos_y,
     limit_u = world.limit[1] # upper arr vel_x, vel_y]
 
-    lower_x = cp.vstack([x - world.TOL] + limit_l[1:]) # arr[pos-TOL,-5,-1,-1]
-    upp_fov = cp.minimum(x + robot.FOV, limit_u[0])    # min(pos+FOV, lim_u[0])
+    lower_x = cp.vstack([x - world.TOL] + limit_l[1:]) # arr[pos-TOL, -5, -1, -1]
+    upp_fov = cp.minimum(x + robot.FOV, limit_u[0])    # min(pos+FOV, limit_u[0])
     upper_x = cp.vstack([upp_fov] + limit_u[1:])       # arr[upp_fov, 5, 1, 1]
 
-    lower_x = lower_x[:, 0]      # real scuffed solution
-    upper_x = upper_x[:, 0]      # .shape (4, 1) to (4,)
+    lower_x = lower_x[:, 0]      # resize arr shape from
+    upper_x = upper_x[:, 0]      # (4, 1) to (4) idk why
 
     lower_u = np.array([-2, -2]) # input u_t lies within
     upper_u = -1 * lower_u       # low_u <= u_t <= upp_u
@@ -392,12 +392,12 @@ def run_simulations(num_iters, plot_period, plot_steps):
             obs_upper.value = np.array(l) + np.array(s)
 
             # Now collect optimized trajectories
-            print("\nProblem: solving...")
+            print(f"\nSolving iter = {iter}")
             problem.solve(verbose = False)
 
             print(f"Status = {problem.status}")
-            print(f"Optimal cost = {problem.value}")
-            print(f"Solve time {problem.solver_stats.solve_time} seconds")
+            print(f"Optimal cost = {int(problem.value)}")
+            print(f"Solve time = {problem.solver_stats.solve_time} secs.")
 
             x_sol = state.value
             u_sol = input.value
