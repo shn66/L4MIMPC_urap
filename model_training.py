@@ -4,10 +4,10 @@ import torch
 import random
 import numpy as np
 import torch.nn as nn
-import torchvision as tv
-import torch.nn.functional as fn
-import torchvision.transforms as hrt
+import torch.optim as optim
 import motion_planning as mp
+import torch.nn.functional as fn
+from torch.utils.data import DataLoader, TensorDataset, random_split
 
 class Dataset:
     """
@@ -58,7 +58,7 @@ class Dataset:
             iter = random.randint(0, max_t)   # random index if None given
         traj = self.trajects[min(iter, max_t)]# select item in array, etc.
 
-        soln_arr = self.data_map[min(iter, max_t)]
+        soln_arr = self.data_map[min(iter, max_t)] 
         max_s = len(soln_arr) - 1
 
         if soln_id == None:
@@ -68,15 +68,97 @@ class Dataset:
         return soln, traj[0], traj[1]         # [[soln]], [start], [goal].
 
 
-def model_training():
-    """ TODO:
-    - Trying to predict a series of binary variables (1,0), so do we use classification or regression? 
-        (How many classes we use is hard to determine, regression is faster but has its own catches)
-    - Problem: how do we go from the inputs (state, control) to predicting the binary variables? 
-        (Most likely use feed-forward neural net).
-    - Task: Set up a rudimentary neural network. Make a boilerplate function that spits out a basic 
-        correct-dimensions output. Do some research into learning rates / ML concepts.
+# Define the neural network
+class MotionPlanningNN(nn.Module):
     """
+    TODO: See neural_network.md for notes.
+    """
+    def __init__(self):
+        super(MotionPlanningNN, self).__init__()
+        
+        # Define the layers
+        self.fc1 = nn.Linear(4, 128)   # Input layer
+        self.fc2 = nn.Linear(128, 256) # Hidden layer 1
+        self.fc3 = nn.Linear(256, 128) # Hidden layer 2
+        self.fc4 = nn.Linear(128, 20)  # Output layer
+        
+        self.dropout = nn.Dropout(0.5) # Dropout layer with 50% probability
+        
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc2(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc3(x))
+        x = torch.sigmoid(self.fc4(x))
+        return x
+
+
+def model_training():
+    """
+    TODO: See neural_network.md for notes.
+    """
+    # Create the model, loss, and optimizer
+    model = MotionPlanningNN()
+    criterion = nn.BCELoss()   # Binary Cross Entropy Loss
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+    # Data Preprocessing
+    dataset = Dataset().solutions
+    initial_states = [item[0] for item in dataset]
+    binary_outputs = [item[2] + item[3] for item in dataset]  # Concatenate binary_lower and binary_upper
+
+    # Convert to PyTorch tensors
+    initial_states = torch.tensor(initial_states, dtype=torch.float32)
+    binary_outputs = torch.tensor(binary_outputs, dtype=torch.float32)
+
+    # Split into training, validation, and test datasets
+    dataset = TensorDataset(initial_states, binary_outputs)
+
+    train_size = int(0.7 * len(dataset))
+    val_size = int(0.15 * len(dataset))
+    test_size = len(dataset) - train_size - val_size
+
+    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
+
+    # Create data loaders
+    BS = 64
+    train_loader = DataLoader(train_dataset, batch_size=BS, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=BS, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=BS, shuffle=False)
+
+
+    # Training Loop
+    num_epochs = 100
+    for epoch in range(num_epochs):
+        
+        model.train()
+        for i, (inputs, labels) in enumerate(train_loader):
+
+            # Forward pass
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            
+            # Backward pass and optimization
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        # Validation
+        model.eval()
+        with torch.no_grad():
+            val_loss = sum(criterion(model(inputs), labels) for inputs, labels in val_loader)
+
+        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}, Val Loss: {val_loss/len(val_loader):.4f}")
+    
+    # Test Evaluation
+    model.eval()
+    with torch.no_grad():
+        test_loss = sum(criterion(model(inputs), labels) for inputs, labels in test_loader)
+    print(f"Test Loss: {test_loss/len(test_loader):.4f}")
+
 
 
 def relaxed_problem(dataset):
