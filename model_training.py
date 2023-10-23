@@ -173,7 +173,7 @@ def relaxed_problem(dataset):
     limit = [[0.0, -4.9,-1.0,-1.0], # lower[pos_x, pos_y,
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
     
-    soln, start, goal = dataset.start_data(soln_id = 0) # [[soln]], [start], [goal]
+    soln, _, goal = dataset.start_data(soln_id = 0) # [[soln]], [start], [goal]
     start, final, bl_sol, bu_sol = soln      # override global start with local one
     
     global_obs = mp.Obstacle_Map(lower_arr, size_arr)
@@ -197,9 +197,13 @@ def relaxed_problem(dataset):
         # Pass them into relaxed problem & compare solns / solve times
         # FIXME: works using any iter and soln_id=0, eventually errors
 
-        state0.value = np.array(start)
-        goal0.value  = np.array(goal)
-        
+        state0.value = np.array(start)  # FIXME: np.array(robot.state)
+        goal0.value  = np.array(goal)   
+
+        # for the updated state and goal, what are the corresponding bl_sol and bu_sol?
+
+        # This is where the Neural Network comes in.
+        # bu_sol, bl_sol =NN( start, goal, obs_lower, obs_size)
         for i in range(world.MAX):
             bool_low[i].value = np.array(bl_sol[i])
             bool_upp[i].value = np.array(bu_sol[i])
