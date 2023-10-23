@@ -86,12 +86,12 @@ class Environment:
         self.trajects  = [] # [[start, goal, state_traj, input_traj], ...]
 
 
-    def random_state(self, bound):
-        lower, upper = self.limit # unpack list -> 2 vars
+    def random_state(self, iters, bound):
+        lower, upper = self.limit # unpack array -> 2 vars
 
-        for _ in range(100):                           # random starting state,
-            x = random.uniform(lower[0], upper[0] * bound) # in x_width * bound
-            y = random.uniform(lower[1], upper[1])     # arr[0] = x, arr[1] = y
+        for _ in range(iters):                             # random starting state:
+            x = random.uniform(lower[0], upper[0] * bound) # within x_width * bound
+            y = random.uniform(lower[1] + self.TOL, upper[1] - self.TOL)
 
             lower_x, size_x, lower_y, size_y = self.global_obs.unwrap()
 
@@ -111,10 +111,9 @@ class Environment:
 
 
     def plot_problem(self, x_sol, start, goal):
-        # Graph the motion planning problem
-        # %matplotlib inline
+        obs_lower = self.global_obs.lower_arr
+        obs_size = self.global_obs.size_arr
 
-        figure = plt.figure()
         plt.gca().add_patch(Rectangle((0, -5), 20, 10, linewidth=5.0, 
                             ec='g', fc='w', alpha=0.2, label="boundary"))
     
@@ -122,14 +121,12 @@ class Environment:
         plt.plot(start[0], start[1], "*", linewidth=10, label="start")
         plt.plot(goal[0], goal[1], '*', linewidth=10, label="goal")
 
-        obs_lower = self.global_obs.lower_arr
-        obs_size = self.global_obs.size_arr
-
         for i in range(len(self.global_obs)):
             label = "obstacle" if i == 0 else ""
 
             plt.gca().add_patch(Rectangle((obs_lower[0][i], obs_lower[1][i]),
                 obs_size[0][i], obs_size[1][i], ec='r', fc='r', label=label))
+        
         plt.legend(loc = 4)
         plt.show()
 
@@ -139,7 +136,7 @@ class Environment:
         if ex: os.makedirs("data")
 
         sols = open("data/solutions.txt", "a")
-        if ex: sols.write("state0; robot.state; bl_sol; bu_sol\n")
+        if ex: sols.write("state0; final_state; bl_sol; bu_sol\n")
 
         sols.write(f"{iter}:\n")
         for x in self.solutions:
@@ -153,7 +150,7 @@ class Environment:
             traj.write('; '.join(map(str, x)) + "\n")
 
         self.solutions = []
-        self.trajects = []
+        self.trajects  = []
 
 
 class Robot:
@@ -169,11 +166,11 @@ class Robot:
         self.TIME = TIME
         self.FOV = FOV
 
-        self.global_obs = global_obs # Obstacle_Map again
-        self.local_obs = Obstacle_Map([[], []], [[], []])
+        self.global_obs = global_obs
+        self.local_obs  = Obstacle_Map([[], []], [[], []])
 
         self.state_traj = [[state[0]], [state[1]], [state[2]], [state[3]]]
-        self.input_traj = [[], []] # track states, inputs by updating arrs
+        self.input_traj = [[], []] # track state, input by updating arrays
 
 
     def detect_obs(self):
@@ -208,7 +205,7 @@ class Robot:
             self.state_traj[i].append(self.state[i])
 
         self.input_traj[0].append(acc_x) # write given input vals
-        self.input_traj[1].append(acc_y)
+        self.input_traj[1].append(acc_y) # arr[0] = x, arr[1] = y
 
         print(f"\nDEBUG: update_state() done = {[round(x, 2) for x in self.state]}")
 
@@ -285,7 +282,8 @@ def motion_planning(world, robot, relaxed):
 #### Obstacle avoidance ####
 
     # Declaring binary variables for obstacle avoidance formulation
-    bool_low, bool_upp = [], []
+    bool_low = []
+    bool_upp = []
     for _ in range(world.MAX):
 
         if relaxed:
@@ -354,12 +352,12 @@ def run_simulations(num_iters, plot_period, plot_steps):
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
     
     global_obs = Obstacle_Map(lower_arr, size_arr)
-    world = Environment(limit, goal, global_obs, TOL=0.1)
+    world = Environment(limit, goal, global_obs, TOL = 0.1)
 
     # Randomize start, get vars & params
     for iter in range(num_iters):
 
-        start = world.random_state(bound = 0.5)
+        start = world.random_state(iters=100, bound=0.5)
         print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
 
         robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
@@ -403,8 +401,9 @@ def run_simulations(num_iters, plot_period, plot_steps):
             u_sol = input.value
 
 
-            bl_sol, bu_sol = [], []
-            for i in range(world.MAX): # float -> int; np.array -> lst
+            bl_sol = []
+            bu_sol = []
+            for i in range(world.MAX): # float-> int; np.array-> list
 
                 bl_sol.append(bool_low[i].value.astype(int).tolist())
                 bu_sol.append(bool_upp[i].value.astype(int).tolist())
@@ -414,19 +413,18 @@ def run_simulations(num_iters, plot_period, plot_steps):
             # 1st value in arr(  x_accel  ,   y_accel  )
 
             if step % plot_period == 0: # every PP steps
-                # collect intermediate sols in world
+                # collect intermediate solution in world
                 world.solutions.append([state0.value.tolist(), robot.state, bl_sol, bu_sol])
 
                 if plot_steps:
                     world.plot_problem(x_sol, start, goal)
-        
-        # collect final trajectory in world:
-        world.trajects.append([start, goal, robot.state_traj, robot.input_traj])
-
         if plot_steps:
             world.plot_problem(np.array(robot.state_traj), start, goal)
 
-        world.export_files(iter) # write world arrays into text files
+        # collect final trajectory in world:
+        world.trajects.append([start, goal, robot.state_traj, robot.input_traj])
+        
+        world.export_files(iter) # write world arrays into txt files
 
-# Enter plot_steps=True to view graph every plot_period steps
-# run_simulations(num_iters=100, plot_period=10, plot_steps=False)
+if __name__ == "__main__": # Set True to see every plot_period steps
+    run_simulations(num_iters=100, plot_period=10, plot_steps=False)
