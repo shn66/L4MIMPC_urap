@@ -1,6 +1,7 @@
 import os
 import copy
 import random
+import pickle
 import numpy as np
 import cvxpy as cp
 import matplotlib.pyplot as plt
@@ -131,23 +132,15 @@ class Environment:
         plt.show()
 
 
-    def export_files(self, iter):
-        ex = not os.path.exists("data")
-        if ex: os.makedirs("data")
+    def export_files(self):
+        if not os.path.exists('data'):
+            os.mkdir('data')
 
-        sols = open("data/solutions.txt", "a")
-        if ex: sols.write("state0; final_state; bl_sol; bu_sol\n")
+        with open('data/solutions.pkl', 'wb') as x:
+            pickle.dump(self.solutions, x)
 
-        sols.write(f"{iter}:\n")
-        for x in self.solutions:
-            sols.write("; ".join(map(str, x)) + "\n")
-        
-        traj = open("data/trajects.txt", "a")
-        if ex: traj.write("start; goal; state_traj; input_traj\n")
-
-        traj.write(f"{iter}:\n")
-        for x in self.trajects:
-            traj.write('; '.join(map(str, x)) + "\n")
+        with open('data/trajects.pkl', 'wb') as x:
+            pickle.dump(self.trajects, x)
 
         self.solutions = []
         self.trajects  = []
@@ -395,7 +388,7 @@ def run_simulations(num_iters, plot_period, plot_steps):
 
             print(f"Status = {problem.status}")
             print(f"Optimal cost = {int(problem.value)}")
-            print(f"Solve time = {problem.solver_stats.solve_time} secs.")
+            print(f"Solve time = {round(problem.solver_stats.solve_time, 2)} secs.")
 
             x_sol = state.value
             u_sol = input.value
@@ -424,7 +417,7 @@ def run_simulations(num_iters, plot_period, plot_steps):
         # collect final trajectory in world:
         world.trajects.append([start, goal, robot.state_traj, robot.input_traj])
         
-        world.export_files(iter) # write world arrays into txt files
+        world.export_files() # write world arrays into pickle files
 
 if __name__ == "__main__": # Set True to see every plot_period steps
     run_simulations(num_iters=100, plot_period=10, plot_steps=False)
