@@ -2,22 +2,34 @@ import ast
 import copy
 import torch
 import random
+import pickle
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import motion_planning as mp
-import torch.nn.functional as fn
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
 class Dataset:
     """
     solutions = [[state0, final_state, bl_sol, bu_sol] ...]
     trajects = [[start, goal, state_traj, input_traj], ...]
-
-    data_map = {key: iteration, value: [[soln], [soln]...]}
-    -> lets us map a final (start & goal) to each array in solutions
     """
     def __init__(self):
+        self.solutions = []
+        self.trajects  = []
+
+        with open('data/solutions.pkl', 'rb') as x:
+            self.solutions = pickle.load(x)
+
+        with open('data/trajects.pkl', 'rb') as f:
+            self.trajects = pickle.load(f)
+
+        print(f"DEBUG: Data imported. len(solns) = {len(self.solutions)}")
+
+
+    def old_import(self):
+        return
+    
         self.solutions = [] # Dynamic data structure setup. Do not mutate.
         self.trajects  = []
         self.data_map  = {}
@@ -51,21 +63,20 @@ class Dataset:
         print(f"DEBUG: Data imported. # of keys = {len(self.data_map.keys())}")
 
 
-    def start_data(self, iter=None, soln_id=None):
-        max_t = len(self.trajects) - 1        # avoids index out of bounds
+    def start_data(self, index = None):
+        # max_t = len(self.trajects) - 1        # avoids index out of bounds
 
-        if iter == None:
-            iter = random.randint(0, max_t)   # random index if None given
-        traj = self.trajects[min(iter, max_t)]# select item in array, etc.
+        # if iter == None:
+            # iter = random.randint(0, max_t)   # random index if None given
+        # traj = self.trajects[min(iter, max_t)]# select item in array, etc.
 
-        soln_arr = self.data_map[min(iter, max_t)] 
-        max_s = len(soln_arr) - 1
+        # soln_arr = self.data_map[min(iter, max_t)]
 
-        if soln_id == None:
-            soln_id = random.randint(0, max_s)
-        soln = soln_arr[min(soln_id, max_s)]
-
-        return soln, traj[0], traj[1]         # [[soln]], [start], [goal].
+        max_s = len(self.solutions) - 1           # avoids index out of bounds
+        if index == None:
+            index = random.randint(0, max_s)      # random index if None given
+        
+        return self.solutions[min(index, max_s)]  # select item in array, etc.
 
 
 # Define the neural network
@@ -170,11 +181,12 @@ def relaxed_problem(dataset):
     size_arr  = [[1.5, 2.5, 2.5, 2.0, 2.0, 1.5, 2.5, 2.5, 2.0, 2.0],      # width: x
                  [2.0, 7.0, 2.0, 6.5, 6.0, 2.0, 7.0, 2.0, 6.5, 6.0]]      # height:y
     
+    goal  =  [20.0, 0.0, 0.0, 0.0]
     limit = [[0.0, -4.9,-1.0,-1.0], # lower[pos_x, pos_y,
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
     
-    soln, _, goal = dataset.start_data(soln_id = 0) # [[soln]], [start], [goal]
-    start, final, bl_sol, bu_sol = soln      # override global start with local one
+    soln = dataset.start_data(index = 0)
+    start, final, bl_sol, bu_sol = soln
     
     global_obs = mp.Obstacle_Map(lower_arr, size_arr)
     world = mp.Environment(limit, goal, global_obs, TOL=0.1)
@@ -190,20 +202,14 @@ def relaxed_problem(dataset):
     # Initialize all CP parameter values
     while diff(goal) > world.TOL: # while not at goal
 
+
         print(f"DEBUG: abs(distance) to goal: {round(diff(goal), 2)}")
         
-
-        # TODO: bool_low, bool_upp are parameters instead of variables
-        # Pass them into relaxed problem & compare solns / solve times
-        # FIXME: works using any iter and soln_id=0, eventually errors
-
-        state0.value = np.array(start)  # FIXME: np.array(robot.state)
+        state0.value = np.array(robot.state)
         goal0.value  = np.array(goal)   
 
-        # for the updated state and goal, what are the corresponding bl_sol and bu_sol?
+        # TODO: implement bu_sol, bl_sol = NN(start, goal, obs_lower, obs_size)
 
-        # This is where the Neural Network comes in.
-        # bu_sol, bl_sol =NN( start, goal, obs_lower, obs_size)
         for i in range(world.MAX):
             bool_low[i].value = np.array(bl_sol[i])
             bool_upp[i].value = np.array(bu_sol[i])
@@ -225,7 +231,7 @@ def relaxed_problem(dataset):
         problem.solve(verbose = False)
 
         print(f"Status = {problem.status}")
-        print(f"Optimal cost = {int(problem.value)}")
+        print(f"Optimal cost = {problem.value}")
         print(f"Solve time = {problem.solver_stats.solve_time} secs.")
 
 
