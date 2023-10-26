@@ -19,19 +19,26 @@ We want the neural network to predict the boolean variables (`binary_lower` and 
 
 We have 2 arrays of size 10, so we have 10 tasks for `binary_lower` and another 10 for `binary_upper`, giving us a total of 20 tasks.
 
+#### TODO:
+total output size = vectorised (binary_lower+binary_upper) = (N_obs_max*2*N + N_obs_max*2*N) = (10*2*50 + 10*2*50) = 2000
+
 **Answer 2:** We should use a feed-forward neural network (FF-NN).
 
-**Input Layer:** Size will be size of `initial_state` array, which is 4.
+#### TODO:
+**Input Layer:** Size will be size of `initial_state` array (+ obstacles too), which is 4.
 
 **Hidden Layers:** We can start with 2. (# of neurons can be: input size < # < output size).
 
-**Output Layer:** Size will be total # of boolean variables, which is 20.
+#### TODO:
+**Output Layer:** Size will be total # of boolean variables, which is (update correctly to 2000).
+#### TODO: (This should be a one-hot encoding for the multi-label binary classes)
 
 **Activation Functions:** For the hidden layers, we can use `ReLU`. For the output layer, we can use `Sigmoid`. Each neuron outputs a value from 0 to 1, so we can threshold at 0.5 to determine the class (0 or 1).
 
 ## Training (and misc.):
 
-**Loss Function:** We should use the binary cross-entropy loss function.
+#### TODO:
+**Loss Function:** We should use the binary cross-entropy loss function. (Check if output needs to be in one-hot encoding)
 
 **Optimizer:** We can start with the Adam optimizer and see if it works.
 
