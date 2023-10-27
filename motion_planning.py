@@ -1,6 +1,7 @@
 import os
 import copy
 import random
+import pickle
 import numpy as np
 import cvxpy as cp
 import matplotlib.pyplot as plt
@@ -16,7 +17,7 @@ class Obstacle_Map:
     """
     def __init__(self, lower_arr, size_arr):
         self.lower_arr = lower_arr
-        self.size_arr = size_arr
+        self.size_arr  = size_arr
 
         case = 0 # checks both arrays have x, y
         if not (len(lower_arr) == len(size_arr) == 2):
@@ -39,8 +40,8 @@ class Obstacle_Map:
 
         found = False
         for i in range(len(self.lower_arr[0])):
-            
             # check all 4 vals at index i
+
             if (lower_x == self.lower_arr[0][i] and
                 lower_y == self.lower_arr[1][i] and
                 size_x == self.size_arr[0][i] and
@@ -77,13 +78,13 @@ class Environment:
     """
     def __init__(self, limit, goal, global_obs, TOL):
         self.limit = limit
-        self.goal = goal
-        self.TOL = TOL
+        self.goal  = goal
+        self.TOL   = TOL
         self.global_obs = global_obs
-        self.MAX = len(global_obs)
+        self.MAX   = len(global_obs)
 
-        self.solutions = [] # [[state0, final_state, bl_sol, bu_sol], ...]
-        self.trajects  = [] # [[start, goal, state_traj, input_traj], ...]
+        self.solutions = [] # [[state, bl_sol, bu_sol], ...]
+        self.trajects  = [] # [[state_traj, input_traj] ...]
 
 
     def random_state(self, iters, bound):
@@ -131,23 +132,18 @@ class Environment:
         plt.show()
 
 
-    def export_files(self, iter):
-        ex = not os.path.exists("data")
-        if ex: os.makedirs("data")
+    def export_files(self):
+        obs = self.global_obs
+        data = [self.limit, self.goal, obs.lower_arr, obs.size_arr]
 
-        sols = open("data/solutions.txt", "a")
-        if ex: sols.write("state0; final_state; bl_sol; bu_sol\n")
+        if not os.path.exists("data"):
+            os.mkdir("data")
 
-        sols.write(f"{iter}:\n")
-        for x in self.solutions:
-            sols.write("; ".join(map(str, x)) + "\n")
-        
-        traj = open("data/trajects.txt", "a")
-        if ex: traj.write("start; goal; state_traj; input_traj\n")
+        with open("data/solutions.pkl", "wb") as x:
+            pickle.dump([data] + self.solutions, x)
 
-        traj.write(f"{iter}:\n")
-        for x in self.trajects:
-            traj.write('; '.join(map(str, x)) + "\n")
+        with open("data/trajects.pkl", "wb") as x:
+            pickle.dump([data] + self.trajects, x)
 
         self.solutions = []
         self.trajects  = []
@@ -163,14 +159,14 @@ class Robot:
     """
     def __init__(self, state, global_obs, TIME, FOV):
         self.state = state
-        self.TIME = TIME
-        self.FOV = FOV
+        self.TIME  = TIME
+        self.FOV   = FOV
 
         self.global_obs = global_obs
         self.local_obs  = Obstacle_Map([[], []], [[], []])
 
-        self.state_traj = [[state[0]], [state[1]], [state[2]], [state[3]]]
-        self.input_traj = [[], []] # track state, input by updating arrays
+        self.state_traj = [[], [], [], []]    # track vars by updating arr
+        self.input_traj = [[], []]
 
 
     def detect_obs(self):
@@ -192,6 +188,12 @@ class Robot:
     
 
     def update_state(self, acc_x, acc_y):
+        for i in range(4):               # write curr/start state
+            self.state_traj[i].append(self.state[i])
+
+        self.input_traj[0].append(acc_x) # write given input vals
+        self.input_traj[1].append(acc_y) # arr[0] = x, arr[1] = y
+
         t = self.TIME
         pos_x, pos_y, vel_x, vel_y = self.state   # unpack state -> 4 vars
 
@@ -201,12 +203,7 @@ class Robot:
         vel_y += acc_y * t # v = v0 + a * t
         
         self.state = [pos_x, pos_y, vel_x, vel_y] # assign new state array
-        for i in range(4):                        # write calculated state
-            self.state_traj[i].append(self.state[i])
-
-        self.input_traj[0].append(acc_x) # write given input vals
-        self.input_traj[1].append(acc_y) # arr[0] = x, arr[1] = y
-
+        
         print(f"\nDEBUG: update_state() done = {[round(x, 2) for x in self.state]}")
 
 
@@ -248,7 +245,6 @@ def motion_planning(world, robot, relaxed):
     N = 50
     
 ## Vars & Parameters
-    
     # Declare variables for state and input trajectories
     state = cp.Variable((dim_state, N + 1)) # STATE IS X
     input = cp.Variable((dim_input, N))     # INPUT IS U
@@ -261,7 +257,6 @@ def motion_planning(world, robot, relaxed):
     obs_upper = cp.Parameter((2, world.MAX)) # cols = world.MAX of all obs
 
 ## State constraints
-
     x = state0[0]
     limit_l = world.limit[0] # lower arr[pos_x, pos_y,
     limit_u = world.limit[1] # upper arr vel_x, vel_y]
@@ -280,12 +275,10 @@ def motion_planning(world, robot, relaxed):
 
 
 #### Obstacle avoidance ####
-
     # Declaring binary variables for obstacle avoidance formulation
-    bool_low = []
-    bool_upp = []
-    for _ in range(world.MAX):
+    bool_low, bool_upp = [], []
 
+    for _ in range(world.MAX):
         if relaxed:
             bool_low.append(cp.Parameter((2, N), boolean=True))
             bool_upp.append(cp.Parameter((2, N), boolean=True))
@@ -296,7 +289,7 @@ def motion_planning(world, robot, relaxed):
     # DONE: Big-M hardcoded to 2 * upper_limit_x, 2 * upper_limit_y
     M = np.diag([2 * limit_u[0], 2 * limit_u[1]])
     
-    constraints = [state[:, 0] == state0] # initial state constraint
+    constraints = [state[:, 0] == state0]# initial state constraint
     objective = 0
     
     for k in range(N):
@@ -311,11 +304,11 @@ def motion_planning(world, robot, relaxed):
         # big-M formulation of obstacle avoidance constraints
         for i in range(world.MAX):
 
+
             constraints += [
                 state[0:2, k + 1] <= obs_lower[:, i] + M @ bool_low[i][:, k],
                 state[0:2, k + 1] >= obs_upper[:, i] - M @ bool_upp[i][:, k]]
             
-
             # IF YOU SATISFY ALL 4 OF OBS'S CONSTRAINTS, YOURE IN THE OBS.
             constraints += [
                 bool_low[i][0, k] + bool_low[i][1, k] + bool_upp[i][0, k] + bool_upp[i][1, k] <= 3]
@@ -366,13 +359,13 @@ def run_simulations(num_iters, plot_period, plot_steps):
         state, input, bool_low, bool_upp = vars
         state0, goal0, obs_lower, obs_upper = params
 
-        diff = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
+        dist = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
 
   
-        # Initialize all CP parameter values
-        while diff(goal) > world.TOL: # while not at goal
+        # Initialize all CP.parameter values
+        while dist(goal) > world.TOL:
 
-            print(f"DEBUG: abs(distance) to goal: {round(diff(goal), 2)}")
+            print(f"DEBUG: abs(distance) to goal: {round(dist(goal), 2)}")
 
             state0.value = np.array(robot.state)
             goal0.value = np.array(goal)
@@ -394,37 +387,34 @@ def run_simulations(num_iters, plot_period, plot_steps):
             problem.solve(verbose = False)
 
             print(f"Status = {problem.status}")
-            print(f"Optimal cost = {int(problem.value)}")
-            print(f"Solve time = {problem.solver_stats.solve_time} secs.")
+            print(f"Optimal cost = {round(problem.value, 2)}")
+            print(f"Solve time = {round(problem.solver_stats.solve_time, 2)} secs.")
 
             x_sol = state.value
             u_sol = input.value
+            bl_sol, bu_sol = [], []
 
 
-            bl_sol = []
-            bu_sol = []
-            for i in range(world.MAX): # float-> int; np.array-> list
+            for i in range(world.MAX): # convert np.array to py.lists
+                bl_sol.append(bool_low[i].value.tolist())
+                bu_sol.append(bool_upp[i].value.tolist())
 
-                bl_sol.append(bool_low[i].value.astype(int).tolist())
-                bu_sol.append(bool_upp[i].value.astype(int).tolist())
+            if (len(robot.state_traj[0]) - 1) % plot_period == 0:
 
-            step = len(robot.state_traj[0]) - 1
+                # every plot_period steps, collect solutions in world
+                world.solutions.append([robot.state, bl_sol, bu_sol])
+                if plot_steps:
+                    world.plot_problem(x_sol, start, goal)
+            
             robot.update_state(u_sol[0][0], u_sol[1][0])
             # 1st value in arr(  x_accel  ,   y_accel  )
 
-            if step % plot_period == 0: # every PP steps
-                # collect intermediate solution in world
-                world.solutions.append([state0.value.tolist(), robot.state, bl_sol, bu_sol])
-
-                if plot_steps:
-                    world.plot_problem(x_sol, start, goal)
         if plot_steps:
             world.plot_problem(np.array(robot.state_traj), start, goal)
 
-        # collect final trajectory in world:
-        world.trajects.append([start, goal, robot.state_traj, robot.input_traj])
+        world.trajects.append([robot.state_traj, robot.input_traj])
         
-        world.export_files(iter) # write world arrays into txt files
+        world.export_files()
 
 if __name__ == "__main__": # Set True to see every plot_period steps
-    run_simulations(num_iters=100, plot_period=10, plot_steps=False)
+    run_simulations(num_iters=1, plot_period=10, plot_steps=False)
