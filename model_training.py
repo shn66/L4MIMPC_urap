@@ -1,4 +1,3 @@
-import ast
 import copy
 import torch
 import random
@@ -7,28 +6,28 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import motion_planning as mp
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset, random_split
 
 class Dataset:
     """
-    ALL DATATYPES ARE PYTHON LISTS
+    ALL VARIABLES ARE PYTHON LISTS
     FOR BELOW: [data] = [limit, goal, lower_arr, size_arr]
 
     solutions.pkl = [[data], [state, bl_sol, bu_sol], ...]
     trajects.pkl  = [[data], [state_traj, input_traj] ...]
     """
     def __init__(self):
-        self.limit = []
-        self.goal  = []
-        self.lower_arr = []
-        self.size_arr  = []
-        self.solutions = []
-        self.trajects  = []
+        self.limit = []     # shape (2, 4)
+        self.goal  = []     # shape (4,  )
+        self.lower_arr = [] # shape (2, 10)
+        self.size_arr  = [] # shape (2, 10)
+        self.solutions = [] # [state, bl_sol, bu_sol]
+        self.trajects  = [] # [state_traj, input_traj]
 
         with open("data/solutions.pkl", "rb") as x:
-            soln = pickle.load(x)
-            self.solutions = soln[1:]
-            self.limit, self.goal, self.lower_arr, self.size_arr = soln[0]
+            data = pickle.load(x)
+            self.solutions = data[1:]
+            self.limit, self.goal, self.lower_arr, self.size_arr = data[0]
 
         with open("data/trajects.pkl", "rb") as x:
             self.trajects = pickle.load(x)[1:]
@@ -108,6 +107,114 @@ def relaxed_problem(dataset):
         # 1st value in arr(  x_accel  ,   y_accel  )
         world.plot_problem(x_sol, start, goal)
 
+INPUT  = 44
+HIDDEN = 128
+OUTPUT = 2000
+
+class BinaryNN(nn.Module):
+    # Num of classes = 2 because binary.
+    
+    def __init__(self):
+        super(BinaryNN, self).__init__()
+        
+        # Input size = 44:
+            # lower_arr shape = (2, 10) = 20
+            # size_arr  shape = (2, 10) = 20
+            # state_arr shape = (4,)    = 4
+        self.input   = nn.Linear(INPUT, HIDDEN)
+        
+        # Hidden size = x -> (2 * x) -> x
+            # nn.Linear args go (input, output)
+        self.hidden1 = nn.Linear(HIDDEN, 2 * HIDDEN)
+        self.hidden2 = nn.Linear(2 * HIDDEN, HIDDEN)
+        
+        # Output size = 2000:
+            # bl_sol shape = (10, 2, 50) = 1000
+            # bu_sol shape = (10, 2, 50) = 1000
+        self.output  = nn.Linear(HIDDEN, OUTPUT)
+
+    def forward(self, x):
+        # Input, hidden: relu activation
+        x = torch.relu(self.input(x))
+        x = torch.relu(self.hidden1(x))
+        x = torch.relu(self.hidden2(x))
+        
+        # Output with sigmoid activation
+        return torch.sigmoid(self.output(x))
+
+
+def model_training(dataset):
+
+    # Extract data & labels from dataset
+    max_id = len(dataset.solutions)
+    data   = torch.zeros((max_id, INPUT))  # size = 44:  (state, obs_arrs)
+    labels = torch.zeros((max_id, OUTPUT)) # size = 2000: (bl_sol, bu_sol)
+
+    for i in range(max_id):
+        # Extract lower_arr & size_arr                     .view(-1) flattens array to 1D
+        data[i, 0: 20] = torch.Tensor(dataset.lower_arr[i]).view(-1) # 20 items: [0:  20)
+        data[i, 20:40] = torch.Tensor(dataset.size_arr[i]).view(-1)  # 20 items: [20: 40)
+        
+        sols = dataset.solutions[i]
+        # Extract state from solutions
+        data[i, 40:]     = torch.Tensor(sols[0]) # 4 items: [40: end]
+        
+        # Extract bl_sol & bu_sol also          .view(-1) flattens array to 1D:
+        labels[i, :1000] = torch.Tensor(sols[1]).view(-1) # 1k items: [0: 1000)
+        labels[i, 1000:] = torch.Tensor(sols[2]).view(-1) # 1k items: [1k: end)
+
+    # Split data -> training, validation
+    RATIO  = 0.8  # 80 % train, 20 % valid
+
+    train_size = int(RATIO * len(data))
+    valid_size   = len(data) - train_size
+
+    td = TensorDataset(data, labels)
+    train_data, valid_data = random_split(td, [train_size, valid_size])
+
+
+    BATCH_SIZE = 32
+    LEARN_RATE = 0.001
+    NUM_ITERS  = 10
+
+    # Create data loaders
+    train_load = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
+    valid_load = DataLoader(valid_data, batch_size=BATCH_SIZE, shuffle=False)
+
+    # Create NN model, loss function, optimizer
+    model = BinaryNN()
+    criterion = nn.BCELoss() # binary cross entropy loss func
+    optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
+
+    # Start training loop
+    for i in range(NUM_ITERS):
+        model.train()
+        train_loss = 0.0
+
+        for inputs, targets in train_load:
+            optimizer.zero_grad()
+            outputs = model(inputs)
+
+            loss = criterion(outputs, targets)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+        
+        # Start validation loop
+        model.eval()
+        valid_loss = 0.0
+        with torch.no_grad():
+
+            for inputs, targets in valid_load:
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+                valid_loss += loss.item()
+        
+        print(f"\nIter = {i + 1}/{NUM_ITERS}")
+        print(f"Train Loss = {train_loss / len(train_load):.2f}")
+        print(f"Valid Loss = {valid_loss / len(valid_load):.2f}")
+
+    print("\nmodel_training() done :)")
+
 if __name__ == "__main__":
-    dataset = Dataset()
-    relaxed_problem(dataset)
+    relaxed_problem(Dataset())
