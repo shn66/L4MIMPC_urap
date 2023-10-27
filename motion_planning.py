@@ -395,9 +395,9 @@ def run_simulations(num_iters, plot_period, plot_steps):
             bl_sol, bu_sol = [], []
 
 
-            for i in range(world.MAX): # float-> int; np.array-> list
-                bl_sol.append(bool_low[i].value.astype(int).tolist())
-                bu_sol.append(bool_upp[i].value.astype(int).tolist())
+            for i in range(world.MAX): # convert np.array to py.lists
+                bl_sol.append(bool_low[i].value.tolist())
+                bu_sol.append(bool_upp[i].value.tolist())
 
             if (len(robot.state_traj[0]) - 1) % plot_period == 0:
 
@@ -414,7 +414,7 @@ def run_simulations(num_iters, plot_period, plot_steps):
 
         world.trajects.append([robot.state_traj, robot.input_traj])
         
-        world.export_files() # export world arrays into pickle files
+        world.export_files()
 
 if __name__ == "__main__": # Set True to see every plot_period steps
     run_simulations(num_iters=1, plot_period=10, plot_steps=False)
