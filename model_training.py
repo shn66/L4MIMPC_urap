@@ -1,3 +1,4 @@
+import os
 import copy
 import torch
 import random
@@ -11,47 +12,43 @@ from torch.utils.data import DataLoader, TensorDataset, random_split
 class Dataset:
     """
     ALL VARIABLES ARE PYTHON LISTS
-    FOR BELOW: [data] = [limit, goal, lower_arr, size_arr]
-
-    solutions.pkl = [[data], [state, bl_sol, bu_sol], ...]
-    trajects.pkl  = [[data], [state_traj, input_traj] ...]
+    FOR BELOW: [info] = [limit, goal, lower_arr, size_arr]
+    solutions.pkl = [[info], [state, bl_sol, bu_sol], ...]
     """
-    def __init__(self):
-        self.limit = []     # shape (2, 4)
-        self.goal  = []     # shape (4,  )
-        self.lower_arr = [] # shape (2, 10)
-        self.size_arr  = [] # shape (2, 10)
-        self.solutions = [] # [state, bl_sol, bu_sol]
-        self.trajects  = [] # [state_traj, input_traj]
+    def __init__(self, max_id):
+        self.max_id  = max_id
+        self.datamap = {
+        # EACH KEY CONTAINS THESE VALUES [
+        #   limit = shape (2, 4)
+        #   goal  = shape (4,  )
+        #   lower_arr = shape (2, 10)
+        #   size_arr  = shape (2, 10)
+        #   solutions = [state, bl_sol, bu_sol]
+        # ]
+        }
+        print("\nDEBUG: Dataset starting.")
 
-        with open("data/solutions.pkl", "rb") as x:
-            data = pickle.load(x)
-            self.solutions = data[1:]
-            self.limit, self.goal, self.lower_arr, self.size_arr = data[0]
+        for i in range(max_id):
+            with open(f"data/solutions{i}.pkl", "rb") as x:
+                self.datamap[i] = pickle.load(x)
 
-        with open("data/trajects.pkl", "rb") as x:
-            self.trajects = pickle.load(x)[1:]
+        print(f"DEBUG: Dataset imported. {len(self.datamap)} iterations.")
 
-        print(f"DEBUG: Dataset created. {len(self.solutions)} solutions.")
-
-
-    def select(self, index = None):               # -> [state, bl_sol, bu_sol]
-        max_id = len(self.solutions) - 1          # avoids index out of bounds
-
+    def solution(self, index = None): # -> [[info], [state, bl_sol, bu_sol], ...]
         if index == None:
-            index = random.randint(0, max_id)     # random index if None given
-        return self.solutions[min(index, max_id)] # select item in array, etc.
+            index = random.randint(0, self.max_id)   # random index if None given
+        return self.datamap[min(index, self.max_id)] # avoids index out of bounds
 
 
 def relaxed_problem(dataset):
     # A MODIFIED motion planning problem
 
-    limit = dataset.limit
-    goal  = dataset.goal
-    lower_arr = dataset.lower_arr
-    size_arr  = dataset.size_arr
+    data = dataset.solution(index = 1) # -> [[info], [state, bl_sol, bu_sol] ...]
+    limit, goal, lower_arr, size_arr = data[0] # info: [limit, goal, lower, size]
 
-    start, bl_sol, bu_sol = dataset.select(index = 0)
+    index = random.randint(1, len(data) - 1)  # random solutions array (data[1:])
+    start, bl_sol, bu_sol = data[index]       # which is: [state, bl_sol, bu_sol]
+
     global_obs = mp.Obstacle_Map(lower_arr, size_arr)
 
     world = mp.Environment(limit, goal, global_obs, TOL = 0.1)
@@ -217,4 +214,5 @@ def model_training(dataset):
     print("\nmodel_training() done :)")
 
 if __name__ == "__main__":
-    relaxed_problem(Dataset())
+    size = len(os.listdir("data"))
+    relaxed_problem(Dataset(size))
