@@ -132,18 +132,18 @@ class Environment:
         plt.show()
 
 
-    def export_files(self):
+    def export_files(self, iter):
         obs = self.global_obs
-        data = [self.limit, self.goal, obs.lower_arr, obs.size_arr]
+        info = [self.limit, self.goal, obs.lower_arr, obs.size_arr]
 
         if not os.path.exists("data"):
             os.mkdir("data")
 
-        with open("data/solutions.pkl", "wb") as x:
-            pickle.dump([data] + self.solutions, x)
+        with open(f"data/solutions{iter}.pkl", "wb") as x:
+            pickle.dump([info] + self.solutions, x)
 
-        with open("data/trajects.pkl", "wb") as x:
-            pickle.dump([data] + self.trajects, x)
+        # with open(f"data/trajects{iter}.pkl", "wb") as x:
+            # pickle.dump([info] + self.trajects, x)
 
         self.solutions = []
         self.trajects  = []
@@ -348,9 +348,9 @@ def run_simulations(num_iters, plot_period, plot_steps):
     world = Environment(limit, goal, global_obs, TOL = 0.1)
 
     # Randomize start, get vars & params
-    for iter in range(num_iters):
+    for iter in range(191, num_iters):
 
-        start = world.random_state(iters=100, bound=0.5)
+        start = world.random_state(iters=100, bound=0.9)
         print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
 
         robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
@@ -395,9 +395,9 @@ def run_simulations(num_iters, plot_period, plot_steps):
             bl_sol, bu_sol = [], []
 
 
-            for i in range(world.MAX): # convert np.array to py.lists
-                bl_sol.append(bool_low[i].value.tolist())
-                bu_sol.append(bool_upp[i].value.tolist())
+            for i in range(world.MAX): # convert np.arrays to python lists
+                bl_sol.append(np.around(bool_low[i].value, 1).tolist())
+                bu_sol.append(np.around(bool_upp[i].value, 1).tolist())
 
             if (len(robot.state_traj[0]) - 1) % plot_period == 0:
 
@@ -412,9 +412,9 @@ def run_simulations(num_iters, plot_period, plot_steps):
         if plot_steps:
             world.plot_problem(np.array(robot.state_traj), start, goal)
 
-        world.trajects.append([robot.state_traj, robot.input_traj])
+        # world.trajects.append([robot.state_traj, robot.input_traj])
         
-        world.export_files()
+        world.export_files(iter)
 
 if __name__ == "__main__": # Set True to see every plot_period steps
-    run_simulations(num_iters=1, plot_period=10, plot_steps=False)
+    run_simulations(num_iters=334, plot_period=1, plot_steps=False)
