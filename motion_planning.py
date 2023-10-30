@@ -139,11 +139,12 @@ class Environment:
         if not os.path.exists("data"):
             os.mkdir("data")
 
+        if os.path.exists(f"data/solutions{iter}.pkl"):
+            ans = input(f"\nWARNING: {iter}.pkl will be overwritten. Proceed (Y/N)")
+            if ans.lower() == "n": exit()
+
         with open(f"data/solutions{iter}.pkl", "wb") as x:
             pickle.dump([info] + self.solutions, x)
-
-        # with open(f"data/trajects{iter}.pkl", "wb") as x:
-            # pickle.dump([info] + self.trajects, x)
 
         self.solutions = []
         self.trajects  = []
@@ -331,7 +332,7 @@ def motion_planning(world, robot, relaxed):
         return problem, (state, input, bool_low, bool_upp), (state0, goal0, obs_lower, obs_upper)
 
 
-def run_simulations(num_iters, plot_period, plot_steps):
+def run_simulations(num_iters, write_per, plot_prob):
     # Create the motion planning problem
 
     lower_arr = [[0.0, 2.0, 2.0, 5.0, 7.5, 10.0, 12.0, 12.0, 15.0, 17.5], # x coords
@@ -348,7 +349,7 @@ def run_simulations(num_iters, plot_period, plot_steps):
     world = Environment(limit, goal, global_obs, TOL = 0.1)
 
     # Randomize start, get vars & params
-    for iter in range(191, num_iters):
+    for iter in range(num_iters):
 
         start = world.random_state(iters=100, bound=0.9)
         print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
@@ -395,26 +396,25 @@ def run_simulations(num_iters, plot_period, plot_steps):
             bl_sol, bu_sol = [], []
 
 
-            for i in range(world.MAX): # convert np.arrays to python lists
+            for i in range(world.MAX): # converts np.arrays to py.lists
                 bl_sol.append(np.around(bool_low[i].value, 1).tolist())
                 bu_sol.append(np.around(bool_upp[i].value, 1).tolist())
 
-            if (len(robot.state_traj[0]) - 1) % plot_period == 0:
+            if (len(robot.state_traj[0]) - 1) % write_per == 0:
 
-                # every plot_period steps, collect solutions in world
+                # Write soln to solutions array every write_per steps
                 world.solutions.append([robot.state, bl_sol, bu_sol])
-                if plot_steps:
+                
+                if plot_prob:
                     world.plot_problem(x_sol, start, goal)
             
             robot.update_state(u_sol[0][0], u_sol[1][0])
             # 1st value in arr(  x_accel  ,   y_accel  )
 
-        if plot_steps:
+        if plot_prob:
             world.plot_problem(np.array(robot.state_traj), start, goal)
-
-        # world.trajects.append([robot.state_traj, robot.input_traj])
         
         world.export_files(iter)
 
-if __name__ == "__main__": # Set True to see every plot_period steps
-    run_simulations(num_iters=334, plot_period=1, plot_steps=False)
+if __name__ == "__main__": # record soln every write_per steps
+    run_simulations(num_iters=0, write_per=1, plot_prob=False)
