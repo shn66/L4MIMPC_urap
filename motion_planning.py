@@ -139,10 +139,6 @@ class Environment:
         if not os.path.exists("data"):
             os.mkdir("data")
 
-        if os.path.exists(f"data/solutions{iter}.pkl"):
-            ans = input(f"\nWARNING: {iter}.pkl will be overwritten. Proceed (Y/N)")
-            if ans.lower() == "n": exit()
-
         with open(f"data/solutions{iter}.pkl", "wb") as x:
             pickle.dump([info] + self.solutions, x)
 
@@ -348,8 +344,12 @@ def run_simulations(num_iters, write_per, plot_prob):
     global_obs = Obstacle_Map(lower_arr, size_arr)
     world = Environment(limit, goal, global_obs, TOL = 0.1)
 
+    if not os.path.exists("data"):
+        os.mkdir("data")
+    size = len(os.listdir("data")) - 1
+
     # Randomize start, get vars & params
-    for iter in range(num_iters):
+    for iter in range(size, num_iters):
 
         start = world.random_state(iters=100, bound=0.9)
         print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
@@ -417,4 +417,7 @@ def run_simulations(num_iters, write_per, plot_prob):
         world.export_files(iter)
 
 if __name__ == "__main__": # record soln every write_per steps
-    run_simulations(num_iters=0, write_per=1, plot_prob=False)
+    #run_simulations(num_iters=0, write_per=1, plot_prob=False)
+    if not os.path.exists("test"):
+        os.mkdir("test")
+    print(len(os.listdir("test")))

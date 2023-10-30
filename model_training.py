@@ -93,11 +93,11 @@ def model_training(dataset):
         soln_arr = soln[i + 1] # -> [state, bl_sol, bu_sol]
 
         # Extract state from solutions
-        data[i, 40:]     = torch.Tensor(soln_arr[1]) # 4 items: [40: end]
+        data[i, 40:]     = torch.Tensor(soln_arr[0]) # state = 4 items
         
         # Extract bl_sol & bu_sol also              .view(-1) flattens array to 1D:
-        labels[i, :1000] = torch.Tensor(soln_arr[2]).view(-1) # bl_sol = 1000 items
-        labels[i, 1000:] = torch.Tensor(soln_arr[3]).view(-1) # bu_sol = 1000 items
+        labels[i, :1000] = torch.Tensor(soln_arr[1]).view(-1) # bl_sol = 1000 items
+        labels[i, 1000:] = torch.Tensor(soln_arr[2]).view(-1) # bu_sol = 1000 items
 
     # Split data -> training, validation
     RATIO  = 0.8  # 80 % train, 20 % valid
@@ -111,7 +111,7 @@ def model_training(dataset):
 
     BATCH_SIZE = 32
     LEARN_RATE = 0.001
-    NUM_ITERS  = 10
+    NUM_ITERS  = 100
 
     # Create data loaders
     train_load = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
