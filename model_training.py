@@ -15,21 +15,23 @@ class Dataset:
     FOR BELOW: [info] = [limit, goal, lower_arr, size_arr]
     solutions.pkl = [[info], [state, bl_sol, bu_sol], ...]
     """
-    def __init__(self, max_id):
-        self.max_id  = max_id
-        self.datamap = {
-        # EACH KEY CONTAINS THESE VALUES
-        #   limit = shape (2, 4)
-        #   goal  = shape (4,  )
-        #   lower_arr = shape (2, 10)
-        #   size_arr  = shape (2, 10)
-        #   solutions = [state, bl_sol, bu_sol]
-        }
+    def __init__(self):
+        self.size = 0
+
+        for file in os.listdir("data"):
+            if file.endswith('.pkl'):
+                self.size += 1
+
+        self.datamap = {}
         print("\nDEBUG: Dataset starting.")
 
-        for i in range(max_id):
-            with open(f"data/solutions{i}.pkl", "rb") as x:
-                self.datamap[i] = pickle.load(x)
+        for i in range(self.size):
+            file = open(f"data/solutions{i}.pkl", "rb")
+            data = pickle.load(file)
+
+            info, sols = data[0], data[1:]
+            self.datamap[info] = i
+
 
         print(f"DEBUG: Dataset imported. {len(self.datamap)} iterations.")
 
@@ -191,36 +193,36 @@ def relaxed_problem(dataset):
             bool_upp[i].value = np.array(bu_sol[i])
 
         robot.detect_obs()
-        l = copy.deepcopy(robot.local_obs.lower_arr)
-        s = copy.deepcopy(robot.local_obs.size_arr)
+        lower = copy.deepcopy(robot.local_obs.lower_arr)
+        size = copy.deepcopy(robot.local_obs.size_arr)
 
-        while (len(l[0]) < world.MAX):
+        while (len(lower[0]) < world.MAX):
             for i in range(2):
-                l[i].append(-2.0) # [len(L) to world.MAX] are fake obs
-                s[i].append(0.0)  # fake obs have lower x,y: -2.0,-2.0
+                lower[i].append(-2.0) # [len(L) to world.MAX] are fake obs
+                size[i].append(0.0)   # fake obs have lower x,y: -2.0,-2.0
 
-        obs_lower.value = np.array(l)
-        obs_upper.value = np.array(l) + np.array(s)
+        obs_lower.value = np.array(lower)
+        obs_upper.value = np.array(lower) + np.array(size)
 
         # Now collect optimized trajectories
         print(f"\nSolving problem...")
         problem.solve(verbose = False)
 
+
         print(f"Status = {problem.status}")
         print(f"Optimal cost = {round(problem.value, 2)}")
         print(f"Solve time = {round(problem.solver_stats.solve_time, 2)} secs.")
 
-        x_sol = state.value
-        u_sol = input.value
+        state_sol = state.value
+        input_sol = input.value
+        bl_sol, bu_sol = [], []
 
-        robot.update_state(u_sol[0][0], u_sol[1][0])
-        # 1st value in arr(  x_accel  ,   y_accel  )
-        world.plot_problem(x_sol, start, goal)
+        robot.update_state(input_sol[0][0], input_sol[1][0])
+        # 1st value in arr(    x_accel    ,    y_accel     )
+        world.plot_problem(state_sol, start, goal)
 
 
 if __name__ == "__main__":
-    max_id  = len(os.listdir("data")) - 1
-    dataset = Dataset(max_id)
-
+    dataset = Dataset()
     model_training(dataset)
     # relaxed_problem(dataset)

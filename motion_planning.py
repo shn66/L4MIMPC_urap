@@ -22,7 +22,7 @@ class Obstacle_Map:
         case = 0 # checks both arrays have x, y
         if not (len(lower_arr) == len(size_arr) == 2):
             case = 1
-        else:    # checks all arrays are equal len
+        else:    # check all len(arr) are equal
             for arr in lower_arr + size_arr:
                 if len(arr) != len(lower_arr[0]):
                     case = 2
@@ -55,7 +55,7 @@ class Obstacle_Map:
             self.size_arr[1].append(size_y)
 
     
-    def unwrap(self): # return (x_l, x_s, y_l, y_s)
+    def unwrap(self): # return (x,y)->(lower, size)
         lower = self.lower_arr
         size = self.size_arr
         return lower[0], size[0], lower[1], size[1]
@@ -71,7 +71,9 @@ class Environment:
     """
     limit = [[0.0, -4.9,-1.0,-1.0], # lower[pos_x, pos_y,
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
+
     goal = [x_pos, y_pos, x_vel, y_vel]
+    solutions = [[state, bl_sol, bu_sol], ...]
 
     global_obs = Obstacle_Map()
     MAX = integer, max # of obs
@@ -80,12 +82,10 @@ class Environment:
         self.limit = limit
         self.goal  = goal
         self.TOL   = TOL
+
+        self.solutions  = []
         self.global_obs = global_obs
-        self.MAX   = len(global_obs)
-
-        self.solutions = [] # [[state, bl_sol, bu_sol], ...]
-        self.trajects  = [] # [[state_traj, input_traj] ...]
-
+        self.MAX = len(global_obs)
 
     def random_state(self, iters, bound):
         lower, upper = self.limit # unpack array -> 2 vars
@@ -111,14 +111,14 @@ class Environment:
         print("\nERROR: random_state() couldn't find valid state"); exit()
 
 
-    def plot_problem(self, x_sol, start, goal):
+    def plot_problem(self, state_sol, start, goal):
         obs_lower = self.global_obs.lower_arr
         obs_size = self.global_obs.size_arr
 
         plt.gca().add_patch(Rectangle((0, -5), 20, 10, linewidth=5.0, 
                             ec='g', fc='w', alpha=0.2, label="boundary"))
     
-        plt.plot(x_sol[0, :], x_sol[1, :], 'o', label="trajectory")
+        plt.plot(state_sol[0, :], state_sol[1, :], 'o', label="trajectory")
         plt.plot(start[0], start[1], "*", linewidth=10, label="start")
         plt.plot(goal[0], goal[1], '*', linewidth=10, label="goal")
 
@@ -131,19 +131,18 @@ class Environment:
         plt.legend(loc = 4)
         plt.show()
 
-
     def export_files(self, iter):
-        obs = self.global_obs
-        info = [self.limit, self.goal, obs.lower_arr, obs.size_arr]
-
         if not os.path.exists("data"):
             os.mkdir("data")
 
-        with open(f"data/solutions{iter}.pkl", "wb") as x:
-            pickle.dump([info] + self.solutions, x)
+        if not os.path.exists("data/info.pkl"):
+            obs = self.global_obs
+            file = open("data/info.pkl", "wb")
+            pickle.dump([self.limit, self.goal, obs.lower_arr, obs.size_arr], file)
 
+        file = open(f"data/solutions{iter}.pkl", "wb")
+        pickle.dump(self.solutions, file)
         self.solutions = []
-        self.trajects  = []
 
 
 class Robot:
@@ -167,19 +166,19 @@ class Robot:
 
 
     def detect_obs(self):
-        x = self.state[0]                     # state = [x_pos, y_pos,...]
+        x_pos = self.state[0]                 # state = [x_pos, y_pos,...]
         lower_x, size_x, lower_y, size_y = self.global_obs.unwrap()
 
         for i in range(len(self.global_obs)): # loop through each obstacle
-            obs_lower = lower_x[i]            # obs's lower corner x value
-            obs_size = size_x[i]              # obs's width in x direction
+            lower = lower_x[i]                # obs's lower corner x value
+            size = size_x[i]                  # obs's width in x direction
             
-            obs_upper = obs_lower + obs_size              # obs's upper corner x value
-            in_FOV = lambda obs: obs >= x and obs <= x + self.FOV  # is obs_corner in robot.FOV
+            upper = lower + size              # is obs's corner within FOV
+            in_FOV = lambda obs: obs >= x_pos and obs <= x_pos + self.FOV
 
-            if (in_FOV(obs_lower) or in_FOV(obs_upper)): # FOV fully capture obstacle
-                self.local_obs.insert((obs_lower, obs_size), (lower_y[i], size_y[i]))
-                # add unchanged vals ((      x_items      ), (       y_items       ))
+            if (in_FOV(lower) or in_FOV(upper)): # FOV fully capture obstacle
+                self.local_obs.insert((lower, size), (lower_y[i], size_y[i]))
+                # add unchanged vals ((  x_items  ), (       y_items       ))
         return
         print(f"\nDEBUG: detect_obs() done. local_obs:\n{self.local_obs}")
     
@@ -254,13 +253,13 @@ def motion_planning(world, robot, relaxed):
     obs_upper = cp.Parameter((2, world.MAX)) # cols = world.MAX of all obs
 
 ## State constraints
-    x = state0[0]
+    x_pos   = state0[0]
     limit_l = world.limit[0] # lower arr[pos_x, pos_y,
     limit_u = world.limit[1] # upper arr vel_x, vel_y]
 
-    lower_x = cp.vstack([x - world.TOL] + limit_l[1:]) # arr[pos-TOL, -5, -1, -1]
-    upp_fov = cp.minimum(x + robot.FOV, limit_u[0])    # min(pos+FOV, limit_u[0])
-    upper_x = cp.vstack([upp_fov] + limit_u[1:])       # arr[upp_fov, 5, 1, 1]
+    lower_x = cp.vstack([x_pos - world.TOL] + limit_l[1:]) # arr[pos-TOL, -5, -1, -1]
+    upp_fov = cp.minimum(x_pos + robot.FOV, limit_u[0])    # min(pos+FOV, limit_u[0])
+    upper_x = cp.vstack([upp_fov] + limit_u[1:])           # arr[upp_fov, 5, 1, 1]
 
     lower_x = lower_x[:, 0]      # resize arr shape from
     upper_x = upper_x[:, 0]      # (4, 1) to (4) idk why
@@ -346,22 +345,23 @@ def run_simulations(num_iters, write_per, plot_prob):
 
     if not os.path.exists("data"):
         os.mkdir("data")
-    size = len(os.listdir("data")) - 1
+    size = sum(1 for x in os.listdir("data") if x.endswith(".pkl"))
 
     # Randomize start, get vars & params
     for iter in range(size, num_iters):
 
         start = world.random_state(iters=100, bound=0.9)
+        robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
+
         print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
 
-        robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
         problem, vars, params = motion_planning(world, robot, relaxed=False)
+
 
         state, input, bool_low, bool_upp = vars
         state0, goal0, obs_lower, obs_upper = params
 
         dist = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
-
   
         # Initialize all CP.parameter values
         while dist(goal) > world.TOL:
@@ -372,29 +372,29 @@ def run_simulations(num_iters, write_per, plot_prob):
             goal0.value = np.array(goal)
 
             robot.detect_obs()
-            l = copy.deepcopy(robot.local_obs.lower_arr)
-            s = copy.deepcopy(robot.local_obs.size_arr)
+            lower = copy.deepcopy(robot.local_obs.lower_arr)
+            size = copy.deepcopy(robot.local_obs.size_arr)
 
-            while (len(l[0]) < world.MAX):
+            while (len(lower[0]) < world.MAX):
                 for i in range(2):
-                    l[i].append(-2.0) # [len(L) to world.MAX] are fake obs
-                    s[i].append(0.0)  # fake obs have lower x,y: -2.0,-2.0
+                    lower[i].append(-2.0) # [len(L) to world.MAX] are fake obs
+                    size[i].append(0.0)   # fake obs have lower x,y: -2.0,-2.0
 
-            obs_lower.value = np.array(l)
-            obs_upper.value = np.array(l) + np.array(s)
+            obs_lower.value = np.array(lower)
+            obs_upper.value = np.array(lower) + np.array(size)
 
             # Now collect optimized trajectories
             print(f"\nSolving iter = {iter}")
             problem.solve(verbose = False)
 
+
             print(f"Status = {problem.status}")
             print(f"Optimal cost = {round(problem.value, 2)}")
             print(f"Solve time = {round(problem.solver_stats.solve_time, 2)} secs.")
 
-            x_sol = state.value
-            u_sol = input.value
+            state_sol = state.value
+            input_sol = input.value
             bl_sol, bu_sol = [], []
-
 
             for i in range(world.MAX): # converts np.arrays to py.lists
                 bl_sol.append(np.around(bool_low[i].value, 1).tolist())
@@ -404,12 +404,12 @@ def run_simulations(num_iters, write_per, plot_prob):
 
                 # Write soln to solutions array every write_per steps
                 world.solutions.append([robot.state, bl_sol, bu_sol])
-                
+
                 if plot_prob:
-                    world.plot_problem(x_sol, start, goal)
+                    world.plot_problem(state_sol, start, goal)
             
-            robot.update_state(u_sol[0][0], u_sol[1][0])
-            # 1st value in arr(  x_accel  ,   y_accel  )
+            robot.update_state(input_sol[0][0], input_sol[1][0])
+            # 1st value in arr(    x_accel    ,    y_accel     )
 
         if plot_prob:
             world.plot_problem(np.array(robot.state_traj), start, goal)
@@ -417,7 +417,4 @@ def run_simulations(num_iters, write_per, plot_prob):
         world.export_files(iter)
 
 if __name__ == "__main__": # record soln every write_per steps
-    #run_simulations(num_iters=0, write_per=1, plot_prob=False)
-    if not os.path.exists("test"):
-        os.mkdir("test")
-    print(len(os.listdir("test")))
+    run_simulations(num_iters=1000, write_per=1, plot_prob=False)
