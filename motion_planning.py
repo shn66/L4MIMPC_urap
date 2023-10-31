@@ -341,11 +341,11 @@ def run_simulations(num_iters, write_per, plot_prob):
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
     
     global_obs = Obstacle_Map(lower_arr, size_arr)
-    world = Environment(limit, goal, global_obs, TOL = 0.1)
+    world = Environment(limit, goal, global_obs, TOL=0.1)
 
     if not os.path.exists("data"):
         os.mkdir("data")
-    size = sum(1 for x in os.listdir("data") if x.endswith(".pkl"))
+    size = sum(1 for file in os.listdir("data") if file.startswith("sol"))
 
     # Randomize start, get vars & params
     for iter in range(size, num_iters):
@@ -402,7 +402,7 @@ def run_simulations(num_iters, write_per, plot_prob):
 
             if (len(robot.state_traj[0]) - 1) % write_per == 0:
 
-                # Write soln to solutions array every write_per steps
+                # write soln to solutions array every write_per steps
                 world.solutions.append([robot.state, bl_sol, bu_sol])
 
                 if plot_prob:
@@ -417,4 +417,4 @@ def run_simulations(num_iters, write_per, plot_prob):
         world.export_files(iter)
 
 if __name__ == "__main__": # record soln every write_per steps
-    run_simulations(num_iters=1000, write_per=1, plot_prob=False)
+    run_simulations(num_iters=999, write_per=1, plot_prob=False)
