@@ -7,45 +7,39 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import motion_planning as mp
+from torch.optim.lr_scheduler import ReduceLROnPlateau as ReduceLR
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
 class Dataset:
     """
-    ALL VARIABLES ARE PYTHON LISTS
-    FOR BELOW: [info] = [limit, goal, lower_arr, size_arr]
-    solutions.pkl = [[info], [state, bl_sol, bu_sol], ...]
+    ALL VARIABLES FROM PKL FILES ARE PYTHON LISTS
+    info.pkl = [limit, goal, lower_arr, size_arr]
+    solutions.pkl = [[state, bl_sol, bu_sol] ...]
     """
     def __init__(self):
-        self.size = 0
+        print("\nDEBUG: Starting dataset.")
 
+        file = open("data/info.pkl", "rb")
+        self.info = pickle.load(file)
+
+        num = 0
         for file in os.listdir("data"):
-            if file.endswith('.pkl'):
-                self.size += 1
+            if file.startswith("sol"):
+                num += 1
 
-        self.datamap = {}
-        print("\nDEBUG: Dataset starting.")
-
-        for i in range(self.size):
+        self.sols = []
+        for i in range(num):
             file = open(f"data/solutions{i}.pkl", "rb")
-            data = pickle.load(file)
+            self.sols += (pickle.load(file))
 
-            info, sols = data[0], data[1:]
-            self.datamap[info] = i
-
-
-        print(f"DEBUG: Dataset imported. {len(self.datamap)} iterations.")
-
-    def solution(self, index = None): # -> [[info], [state, bl_sol, bu_sol], ...]
-        if index == None:
-            index = random.randint(0, self.max_id)   # random index if None given
-        return self.datamap[min(index, self.max_id)] # avoids index out of bounds
+        self.size = len(self.sols)
+        print(f"DEBUG: Dataset initialized. {self.size} data points read")
 
 INPUT  = 44
 HIDDEN = 128
 OUTPUT = 2000
 
 class BinaryNN(nn.Module):
-    # Num of classes = 2 because binary.
     
     def __init__(self):
         super(BinaryNN, self).__init__()
@@ -77,35 +71,30 @@ class BinaryNN(nn.Module):
 
 
 def model_training(dataset):
+    S = dataset.size
 
-    soln = dataset.solution(0) # -> [[info], [state, bl_sol, bu_sol], ...]
-    size = len(soln[1:])
+    # Extract data & labels in dataset
+    data   = torch.zeros((S, INPUT))  # input  = 44  (state + obs_arrs)
+    labels = torch.zeros((S, OUTPUT)) # output = 2000 (bl_sol + bu_sol)
 
-    # Extract data & labels from dataset
-    data   = torch.zeros((size, INPUT))  # input  = 44:  (state, obs_arrs)
-    labels = torch.zeros((size, OUTPUT)) # output = 2000: (bl_sol, bu_sol)
-
-    for i in range(size):
-        info_arr = soln[0]     # -> [limit, goal, lower_arr, size_arr]
-
-        # Extract lower_arr & size_arr            .view(-1) flattens array into 1D
-        data[i, 0: 20] = torch.Tensor(info_arr[2]).view(-1) # lower_arr = 20 items
-        data[i, 20:40] = torch.Tensor(info_arr[3]).view(-1) # size_arr  = 20 items
-        
-        soln_arr = soln[i + 1] # -> [state, bl_sol, bu_sol]
+    for i in range(S):
+        # Extract lower_arr & size_arr                .view(-1) flattens array into 1D
+        data[i, 0: 20] = torch.Tensor(dataset.info[2]).view(-1) # lower_arr = 20 items
+        data[i, 20:40] = torch.Tensor(dataset.info[3]).view(-1) # size_arr  = 20 items
 
         # Extract state from solutions
-        data[i, 40:]     = torch.Tensor(soln_arr[0]) # state = 4 items
+        sols = dataset.sols[i]
+        data[i, 40:44] = torch.Tensor(sols[0]) # state = 4 items
         
-        # Extract bl_sol & bu_sol also              .view(-1) flattens array to 1D:
-        labels[i, :1000] = torch.Tensor(soln_arr[1]).view(-1) # bl_sol = 1000 items
-        labels[i, 1000:] = torch.Tensor(soln_arr[2]).view(-1) # bu_sol = 1000 items
+        # Extract bl_sol & bu_sol also                  .view(-1) flattens array to 1D:
+        labels[i, :1000] = torch.Tensor(sols[1]).view(-1) # bl_sol = 1000 items
+        labels[i, 1000:] = torch.Tensor(sols[2]).view(-1) # bu_sol = 1000 items
 
-    # Split data -> training, validation
-    RATIO  = 0.8  # 80 % train, 20 % valid
+    # Split data = training, validation
+    RATIO = 0.8  # 80% train, 20% valid
 
     train_size = int(RATIO * len(data))
-    valid_size   = len(data) - train_size
+    valid_size = len(data) - train_size
 
     td = TensorDataset(data, labels)
     train_data, valid_data = random_split(td, [train_size, valid_size])
@@ -119,10 +108,13 @@ def model_training(dataset):
     train_load = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
     valid_load = DataLoader(valid_data, batch_size=BATCH_SIZE, shuffle=False)
 
-    # Create NN model, loss function, optimizer
+    # Create model, loss function, optimizer
     model = BinaryNN()
-    criterion = nn.BCELoss() # binary cross entropy loss func
+    loss_func = nn.BCELoss() # binary cross entropy loss func
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
+
+    scheduler = ReduceLR(optimizer, "min")# ReduceLROnPlateau
+    best_loss = float('inf') # track the best validation loss
 
     # Start training loop
     for i in range(NUM_ITERS):
@@ -133,11 +125,12 @@ def model_training(dataset):
             optimizer.zero_grad()
             outputs = model(inputs)
 
-            loss = criterion(outputs, targets)
+            loss = loss_func(outputs, targets)
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
         
+
         # Start validation loop
         model.eval()
         valid_loss = 0.0
@@ -145,12 +138,18 @@ def model_training(dataset):
 
             for inputs, targets in valid_load:
                 outputs = model(inputs)
-                loss = criterion(outputs, targets)
+                loss = loss_func(outputs, targets)
                 valid_loss += loss.item()
         
-        print(f"\nIter = {i + 1}/{NUM_ITERS}")
-        print(f"Train Loss = {train_loss / len(train_load):.2f}")
-        print(f"Valid Loss = {valid_loss / len(valid_load):.2f}")
+        scheduler.step(valid_loss) # update scheduler and LR
+        
+        if valid_loss < best_loss: # saves least lossy model
+            best_loss = valid_loss
+            torch.save(model.state_dict(), 'best_model.pth')
+        
+        print(f"\niteration #: {i + 1}/{NUM_ITERS}")
+        print(f"train_loss = {round(train_loss / len(train_load), 2)}")
+        print(f"valid_loss = {round(valid_loss / len(valid_load), 2)}")
 
     print("\nmodel_training() done :)")
 
