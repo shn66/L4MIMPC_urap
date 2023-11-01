@@ -1,5 +1,4 @@
-import os
-import copy
+import os, copy
 import torch
 import random
 import pickle
@@ -86,7 +85,7 @@ def model_training(dataset):
         sols = dataset.sols[i]
         data[i, 40:44] = torch.Tensor(sols[0]) # state = 4 items
         
-        # Extract bl_sol & bu_sol also                  .view(-1) flattens array to 1D:
+        # Extract bl_sol & bu_sol also          .view(-1) flattens array to 1D:
         labels[i, :1000] = torch.Tensor(sols[1]).view(-1) # bl_sol = 1000 items
         labels[i, 1000:] = torch.Tensor(sols[2]).view(-1) # bu_sol = 1000 items
 
@@ -100,8 +99,8 @@ def model_training(dataset):
     train_data, valid_data = random_split(td, [train_size, valid_size])
 
 
-    BATCH_SIZE = 32
-    LEARN_RATE = 0.001
+    BATCH_SIZE = S // 1000
+    LEARN_RATE = 1 /  1000
     NUM_ITERS  = 100
 
     # Create data loaders
@@ -145,7 +144,7 @@ def model_training(dataset):
         
         if valid_loss < best_loss: # saves least lossy model
             best_loss = valid_loss
-            torch.save(model.state_dict(), 'best_model.pth')
+            torch.save(model.state_dict(), "data/best_model.pth")
         
         print(f"\niteration #: {i + 1}/{NUM_ITERS}")
         print(f"train_loss = {round(train_loss / len(train_load), 2)}")
