@@ -417,4 +417,4 @@ def run_simulations(num_iters, write_per, plot_prob):
         world.export_files(iter)
 
 if __name__ == "__main__": # record soln every write_per steps
-    run_simulations(num_iters=999, write_per=1, plot_prob=False)
+    run_simulations(num_iters=1000, write_per=1, plot_prob=False)
