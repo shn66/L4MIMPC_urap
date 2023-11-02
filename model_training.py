@@ -16,7 +16,7 @@ class Dataset:
     solutions.pkl = [[state, bl_sol, bu_sol] ...]
     """
     def __init__(self):
-        print("\nDEBUG: Starting dataset.")
+        print("\nDEBUG: Dataset initializing.")
 
         file = open("data/info.pkl", "rb")
         self.info = pickle.load(file)
@@ -32,7 +32,7 @@ class Dataset:
             self.sols += (pickle.load(file))
 
         self.size = len(self.sols)
-        print(f"DEBUG: Dataset initialized. {self.size} data points read")
+        print(f"DEBUG: Dataset initialized. {self.size} datapoints read.")
 
 INPUT  = 44
 HIDDEN = 128
@@ -69,7 +69,7 @@ class BinaryNN(nn.Module):
         return torch.sigmoid(self.output(x))
 
 
-def model_training(dataset):
+def model_training(dataset, path):
     S = dataset.size
 
     # Extract data & labels in dataset
@@ -81,16 +81,14 @@ def model_training(dataset):
         data[i, 0: 20] = torch.Tensor(dataset.info[2]).view(-1) # lower_arr = 20 items
         data[i, 20:40] = torch.Tensor(dataset.info[3]).view(-1) # size_arr  = 20 items
 
-        # Extract state from solutions
-        sols = dataset.sols[i]
-        data[i, 40:44] = torch.Tensor(sols[0]) # state = 4 items
+        sols = dataset.sols[i] # Extract state from solutions
+        data[i, 40:44] = torch.Tensor(sols[0])  # state = 4 items
         
         # Extract bl_sol & bu_sol also          .view(-1) flattens array to 1D:
         labels[i, :1000] = torch.Tensor(sols[1]).view(-1) # bl_sol = 1000 items
         labels[i, 1000:] = torch.Tensor(sols[2]).view(-1) # bu_sol = 1000 items
 
-    # Split data = training, validation
-    RATIO = 0.8  # 80% train, 20% valid
+    RATIO = 0.8 # Split data -> 80% train, 20% valid
 
     train_size = int(RATIO * len(data))
     valid_size = len(data) - train_size
@@ -98,10 +96,8 @@ def model_training(dataset):
     td = TensorDataset(data, labels)
     train_data, valid_data = random_split(td, [train_size, valid_size])
 
+    print(f"\nDEBUG: model_training() started.\nBATCH_SIZE = {BATCH_SIZE}, LEARN_RATE = {LEARN_RATE}")
 
-    BATCH_SIZE = S // 1000
-    LEARN_RATE = 1 /  1000
-    NUM_ITERS  = 100
 
     # Create data loaders
     train_load = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
@@ -129,7 +125,6 @@ def model_training(dataset):
             optimizer.step()
             train_loss += loss.item()
         
-
         # Start validation loop
         model.eval()
         valid_loss = 0.0
@@ -144,16 +139,16 @@ def model_training(dataset):
         
         if valid_loss < best_loss: # saves least lossy model
             best_loss = valid_loss
-            torch.save(model.state_dict(), "data/best_model.pth")
+            torch.save(model.state_dict(), path)
         
-        print(f"\niteration #: {i + 1}/{NUM_ITERS}")
-        print(f"train_loss = {round(train_loss / len(train_load), 2)}")
-        print(f"valid_loss = {round(valid_loss / len(valid_load), 2)}")
+        print(f"\niteration  = {i + 1}/{NUM_ITERS}")
+        print(f"train_loss = {round(train_loss / len(train_load), 4)}")
+        print(f"valid_loss = {round(valid_loss / len(valid_load), 4)}")
 
-    print("\nmodel_training() done :)")
+    print("\nmodel_training() finished.")
 
 
-def relaxed_problem(dataset):
+def relaxed_problem(dataset, path):
     # A MODIFIED motion planning problem
 
     data = dataset.solution(index = 1) # -> [[info], [state, bl_sol, bu_sol] ...]
@@ -219,8 +214,26 @@ def relaxed_problem(dataset):
         # 1st value in arr(    x_accel    ,    y_accel     )
         world.plot_problem(state_sol, start, goal)
 
+BATCH_SIZE = 32
+LEARN_RATE = 0.01
+NUM_ITERS  = 100
+
+"""
+Data from training:
+
+BATCH_SIZE || 128  || 128  ||  64  ||  64  ||  32  ||  32
+LEARN_RATE || .01  || .001 || .01  || .001 || .01  || .001
+VALID_LOSS ||.1219 ||.1119 ||.1238 ||.1083 ||.1305 ||.1102
+
+Looks like lower batch_size and learn_rate -> lower loss
+"""
 
 if __name__ == "__main__":
+    path = "data/model_BS_LR_LOSS.pth"
     dataset = Dataset()
-    model_training(dataset)
-    # relaxed_problem(dataset)
+    TRAIN = True
+
+    if TRAIN:
+        model_training(dataset, path)
+    else:
+        relaxed_problem(dataset, path)
