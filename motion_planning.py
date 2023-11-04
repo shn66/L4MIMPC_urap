@@ -7,7 +7,7 @@ import cvxpy as cp
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-class Obstacle_Map:
+class ObsMap:
     """
     lower_arr = [[0.0, 2.0, 2.0, 5.0, 7.0],   # x coords
                  [1.0,-5.0, 3.0,-2.0,-5.0]]   # y coords
@@ -67,7 +67,7 @@ class Obstacle_Map:
         return len(self.size_arr[0])
 
 
-class Environment:
+class World:
     """
     limit = [[0.0, -4.9,-1.0,-1.0], # lower[pos_x, pos_y,
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
@@ -112,8 +112,8 @@ class Environment:
 
 
     def plot_problem(self, state_sol, start, goal):
-        obs_lower = self.global_obs.lower_arr
-        obs_size = self.global_obs.size_arr
+        lower_arr = self.global_obs.lower_arr
+        size_arr  = self.global_obs.size_arr
 
         plt.gca().add_patch(Rectangle((0, -5), 20, 10, linewidth=5.0, 
                             ec='g', fc='w', alpha=0.2, label="boundary"))
@@ -125,11 +125,12 @@ class Environment:
         for i in range(len(self.global_obs)):
             label = "obstacle" if i == 0 else ""
 
-            plt.gca().add_patch(Rectangle((obs_lower[0][i], obs_lower[1][i]),
-                obs_size[0][i], obs_size[1][i], ec='r', fc='r', label=label))
+            plt.gca().add_patch(Rectangle((lower_arr[0][i], lower_arr[1][i]),
+                size_arr[0][i], size_arr[1][i], ec='r', fc='r', label=label))
         
         plt.legend(loc = 4)
         plt.show()
+
 
     def export_files(self, iter):
         if not os.path.exists("data"):
@@ -159,7 +160,7 @@ class Robot:
         self.FOV   = FOV
 
         self.global_obs = global_obs
-        self.local_obs  = Obstacle_Map([[], []], [[], []])
+        self.local_obs  = ObsMap([[], []], [[], []])
 
         self.state_traj = [[], [], [], []]    # track vars by updating arr
         self.input_traj = [[], []]
@@ -340,15 +341,15 @@ def run_simulations(num_iters, write_per, plot_prob):
     limit = [[0.0, -4.9,-1.0,-1.0], # lower[pos_x, pos_y,
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
     
-    global_obs = Obstacle_Map(lower_arr, size_arr)
-    world = Environment(limit, goal, global_obs, TOL=0.1)
+    global_obs = ObsMap(lower_arr, size_arr)
+    world = World(limit, goal, global_obs, TOL=0.1)
 
     if not os.path.exists("data"):
         os.mkdir("data")
-    size = sum(1 for file in os.listdir("data") if file.startswith("sol"))
+    data = [x for x in os.listdir("data") if x.startswith("sol")]
 
     # Randomize start, get vars & params
-    for iter in range(size, num_iters):
+    for iter in range(len(data), num_iters):
 
         start = world.random_state(iters=100, bound=0.9)
         robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
@@ -413,7 +414,6 @@ def run_simulations(num_iters, write_per, plot_prob):
 
         if plot_prob:
             world.plot_problem(np.array(robot.state_traj), start, goal)
-        
         world.export_files(iter)
 
 if __name__ == "__main__": # record soln every write_per steps
