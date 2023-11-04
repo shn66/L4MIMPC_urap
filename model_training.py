@@ -21,13 +21,10 @@ class Dataset:
         file = open("data/info.pkl", "rb")
         self.info = pickle.load(file)
 
-        num = 0
-        for file in os.listdir("data"):
-            if file.startswith("sol"):
-                num += 1
-
+        data = [x for x in os.listdir("data") if x.startswith("sol")]
         self.sols = []
-        for i in range(1):
+
+        for i in range(len(data)):
             file = open(f"data/solutions{i}.pkl", "rb")
             self.sols += (pickle.load(file))
 
@@ -69,7 +66,7 @@ class BinaryNN(nn.Module):
         return torch.sigmoid(self.output(x))
 
 
-def model_training(dataset, path):
+def model_training(dataset):
     S = dataset.size
 
     # Extract data & labels in dataset
@@ -95,6 +92,10 @@ def model_training(dataset, path):
 
     td = TensorDataset(data, labels)
     train_data, valid_data = random_split(td, [train_size, valid_size])
+
+    BATCH_SIZE = 32
+    LEARN_RATE = 0.01
+    NUM_ITERS  = 100
 
     print(f"\nDEBUG: model_training() started.\nBATCH_SIZE = {BATCH_SIZE}, LEARN_RATE = {LEARN_RATE}")
 
@@ -139,7 +140,7 @@ def model_training(dataset, path):
         
         if valid_loss < best_loss: # saves least lossy model
             best_loss = valid_loss
-            torch.save(model.state_dict(), path)
+            torch.save(model.state_dict(), PATH)
         
         print(f"\niteration  = {i + 1}/{NUM_ITERS}")
         print(f"train_loss = {round(train_loss / len(train_load), 4)}")
@@ -148,21 +149,44 @@ def model_training(dataset, path):
     print("\nmodel_training() finished.")
 
 
-def relaxed_problem(dataset, path):
+def load_neural_net(start, lower_arr, size_arr):
+    BOUND = 0.5
+
+    start_t = torch.Tensor(start).view(-1)
+    lower_t = torch.Tensor(lower_arr).view(-1)
+    size_t  = torch.Tensor(size_arr ).view(-1)
+
+    input = torch.cat((start_t, lower_t, size_t))
+
+    model = BinaryNN()
+    model.load_state_dict(torch.load(PATH))
+    model.eval()
+    
+    with torch.no_grad():
+        output = model(input)
+
+    output = (output > BOUND).float()
+
+    bl_sol  = output[:1000].view(10, 2, 50).tolist()
+    bu_sol  = output[1000:].view(10, 2, 50).tolist()
+
+    print(f"\nDEBUG: bl_sol = {bl_sol}")
+    print(f"\nDEBUG: bu_sol = {bu_sol}")
+
+    return bl_sol, bu_sol
+
+
+def relaxed_problem(dataset):
     # A MODIFIED motion planning problem
 
-    # data = dataset.solution(index = 1) # -> [[info], [state, bl_sol, bu_sol] ...]
+    limit, goal, lower_arr, size_arr = dataset.info
 
-    limit, goal, lower_arr, size_arr = dataset.info # [limit, goal, lower, size]
+    index = random.randint(0, dataset.size - 1) # random solutions array
+    start = dataset.sols[index][0]              # 0th index: start state
 
-    # index = random.randint(1, len(data) - 1)  # random solutions array (data[1:])
-    # start, bl_sol, bu_sol = data[index]       # which is: [state, bl_sol, bu_sol]
+    global_obs = mp.ObsMap(lower_arr, size_arr)
 
-    start = dataset.sols[0][0]
-
-    global_obs = mp.Obstacle_Map(lower_arr, size_arr)
-
-    world = mp.Environment(limit, goal, global_obs, TOL = 0.1)
+    world = mp.World(limit, goal, global_obs, TOL=0.1)
     robot = mp.Robot(start, global_obs, TIME=0.2, FOV=10.0)
 
     # Create problem, get vars & params
@@ -181,41 +205,8 @@ def relaxed_problem(dataset, path):
         state0.value = np.array(robot.state)
         goal0.value  = np.array(goal)
 
+        bl_sol, bu_sol = load_neural_net(start, lower_arr, size_arr)
 
-        # TODO: implement bl_sol, bu_sol = Neural_Network(dataset)
-
-        model = BinaryNN()
-        model.load_state_dict(torch.load(path))
-
-        start_t = torch.FloatTensor(start).view(-1)
-        lower_t = torch.FloatTensor(lower_arr).view(-1)
-        size_t  = torch.FloatTensor(size_arr).view(-1)
-        input_t = torch.cat((lower_t, size_t, start_t))
-
-        model.eval()
-
-        threshold = 0.5
-
-        with torch.no_grad():  # Disable gradient calculation
-            output_t = model(input_t)
-        
-        output_np = output_t.numpy()
-
-        output_np[output_np < threshold] = 0
-        output_np[output_np >= threshold] = 1
-
-        output_t_thresh = torch.from_numpy(output_np)
-
-        bl_sol_tensor = output_t_thresh[:1000].view(10, 2, 50)
-        bu_sol_tensor = output_t_thresh[1000:].view(10, 2, 50)
-
-
-        # Convert the tensors to lists
-        bl_sol = bl_sol_tensor.tolist()
-        bu_sol = bu_sol_tensor.tolist()
-
-        print(f"\nbl_sol = {bl_sol}")
-        print(f"\nbu_sol = {bu_sol}")
 
         for i in range(world.MAX):
             bool_low[i].value = np.array(bl_sol[i])
@@ -250,11 +241,6 @@ def relaxed_problem(dataset, path):
         # 1st value in arr(    x_accel    ,    y_accel     )
         world.plot_problem(state_sol, start, goal)
 
-
-BATCH_SIZE = 32
-LEARN_RATE = 0.01
-NUM_ITERS  = 100
-
 """
 Data from training:
 
@@ -264,13 +250,13 @@ VALID_LOSS ||.1219 ||.1119 ||.1238 ||.1083 ||.1305 ||.1102
 
 Looks like lower batch_size and learn_rate -> lower loss
 """
+PATH = "data/model_64_0.001_0.1083.pth"
 
 if __name__ == "__main__":
-    path = "data/model_64_0.001_0.1083.pth"
     dataset = Dataset()
     TRAIN = False
 
     if TRAIN:
-        model_training(dataset, path)
+        model_training(dataset)
     else:
-        relaxed_problem(dataset, path)
+        relaxed_problem(dataset)
