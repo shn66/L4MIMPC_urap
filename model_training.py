@@ -48,19 +48,23 @@ class BinaryNN(nn.Module):
         
         # Hidden size = x -> (2 * x) -> x
             # nn.Linear args go (input, output)
-        self.hidden1 = nn.Linear(HIDDEN, 2 * HIDDEN)
-        self.hidden2 = nn.Linear(2 * HIDDEN, HIDDEN)
+        self.h1 = nn.Linear(HIDDEN, 2 * HIDDEN)
+        self.h2 = nn.Linear(2 * HIDDEN, 4 * HIDDEN)
+        self.h3 = nn.Linear(4 * HIDDEN, 2 * HIDDEN)
+        self.h4 = nn.Linear(2 * HIDDEN, HIDDEN)
         
         # Output size = 2000:
             # bl_sol shape = (10, 2, 50) = 1000
             # bu_sol shape = (10, 2, 50) = 1000
-        self.output  = nn.Linear(HIDDEN, OUTPUT)
+        self.output = nn.Linear(HIDDEN, OUTPUT)
 
     def forward(self, x):
         # Input, hidden: relu activation
         x = torch.relu(self.input(x))
-        x = torch.relu(self.hidden1(x))
-        x = torch.relu(self.hidden2(x))
+        x = torch.relu(self.h1(x))
+        x = torch.relu(self.h2(x))
+        x = torch.relu(self.h3(x))
+        x = torch.relu(self.h4(x))
         
         # Output with sigmoid activation
         return torch.sigmoid(self.output(x))
@@ -93,8 +97,8 @@ def model_training(dataset):
     td = TensorDataset(data, labels)
     train_data, valid_data = random_split(td, [train_size, valid_size])
 
-    BATCH_SIZE = 32
-    LEARN_RATE = 0.01
+    BATCH_SIZE = 64
+    LEARN_RATE = 0.001
     NUM_ITERS  = 100
 
     print(f"\nDEBUG: model_training() started.\nBATCH_SIZE = {BATCH_SIZE}, LEARN_RATE = {LEARN_RATE}")
@@ -248,13 +252,13 @@ BATCH_SIZE || 128  || 128  ||  64  ||  64  ||  32  ||  32
 LEARN_RATE || .01  || .001 || .01  || .001 || .01  || .001
 VALID_LOSS ||.1219 ||.1119 ||.1238 ||.1083 ||.1305 ||.1102
 
-Looks like lower batch_size and learn_rate -> lower loss
+Looks like batch_size = 64, lower learn_rate -> lower loss
 """
-PATH = "data/model_64_0.001_0.1083.pth"
+PATH = "data/best_model.pth"
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN = False
+    TRAIN = True
 
     if TRAIN:
         model_training(dataset)
