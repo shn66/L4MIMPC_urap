@@ -97,10 +97,6 @@ def model_training(dataset):
     td = TensorDataset(data, labels)
     train_data, valid_data = random_split(td, [train_size, valid_size])
 
-    BATCH_SIZE = 64
-    LEARN_RATE = 0.001
-    NUM_ITERS  = 100
-
     print(f"\nDEBUG: model_training() started.\nBATCH_SIZE = {BATCH_SIZE}, LEARN_RATE = {LEARN_RATE}")
 
 
@@ -134,6 +130,7 @@ def model_training(dataset):
         model.eval()
         valid_loss = 0.0
         with torch.no_grad():
+
 
             for inputs, targets in valid_load:
                 outputs = model(inputs)
@@ -170,9 +167,10 @@ def load_neural_net(start, lower_arr, size_arr):
         output = model(input)
 
     output = (output > BOUND).float()
+    # round (x < 0.5) to 0.0, and (x > 0.5) to 1.0
 
-    bl_sol  = output[:1000].view(10, 2, 50).tolist()
-    bu_sol  = output[1000:].view(10, 2, 50).tolist()
+    bl_sol = output[:1000].view(10, 2, 50).tolist()
+    bu_sol = output[1000:].view(10, 2, 50).tolist()
 
     print(f"\nDEBUG: bl_sol = {bl_sol}")
     print(f"\nDEBUG: bu_sol = {bu_sol}")
@@ -246,20 +244,27 @@ def relaxed_problem(dataset):
         world.plot_problem(state_sol, start, goal)
 
 """
-Data from training:
+TRAIN DATA
+    2 hidden layers:
+        BATCH_SIZE || 128  || 128  ||  64  ||  64  ||  32  ||  32
+        LEARN_RATE || .01  || .001 || .01  || .001 || .01  || .001
+        VALID_LOSS ||.1219 ||.1119 ||.1238 ||.1083 ||.1305 ||.1102
 
-BATCH_SIZE || 128  || 128  ||  64  ||  64  ||  32  ||  32
-LEARN_RATE || .01  || .001 || .01  || .001 || .01  || .001
-VALID_LOSS ||.1219 ||.1119 ||.1238 ||.1083 ||.1305 ||.1102
-
-Looks like batch_size = 64, lower learn_rate -> lower loss
+        Looks like batch_size = 64, lower learn_rate -> lower loss
+        
+    4 hidden layers:
+        BATCH_SIZE ||  64  ||
+        LEARN_RATE ||.001  ||
+        VALID_LOSS ||.1013 ||
 """
-PATH = "data/best_model.pth"
+BATCH_SIZE = 64
+LEARN_RATE = 0.001
+NUM_ITERS  = 100
+PATH = "data/best_model_4_layers.pth"
 
 if __name__ == "__main__":
     dataset = Dataset()
     TRAIN = True
-
     if TRAIN:
         model_training(dataset)
     else:
