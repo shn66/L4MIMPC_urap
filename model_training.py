@@ -45,23 +45,23 @@ class BinaryNN(nn.Module):
     Experiment with hidden layers of constant width/size, but deeper / more layers
         - Last resort: extract parts of output from hidden layers & merge together
     """
-    def __init__(self, h_size):
+    def __init__(self, hidden):
         super(BinaryNN, self).__init__()
         
         # Input size = 44:
             # lower_arr shape = (2, 10) = 20
             # size_arr  shape = (2, 10) = 20
             # state_arr shape = (4,)    = 4
-        self.input  = nn.Linear(INPUTS, h_size)
+        self.input  = nn.Linear(INPUTS, hidden)
         
         self.hidden = nn.ModuleList() # FIXED: 10 layers
         for _ in range(10):     # args: (input,  output)
-            self.hidden.append(nn.Linear(h_size, h_size))
+            self.hidden.append(nn.Linear(hidden, hidden))
         
         # Output size = 2000:
             # bl_sol shape = (10, 2, 50) = 1000
             # bu_sol shape = (10, 2, 50) = 1000
-        self.output = nn.Linear(h_size, OUTPUT)
+        self.output = nn.Linear(hidden, OUTPUT)
 
 
     def forward(self, x):
@@ -75,7 +75,7 @@ class BinaryNN(nn.Module):
         return torch.sigmoid(self.output(x))
 
 
-def model_training(dataset, model):
+def model_training(dataset, model=None, hidden=HIDDEN, batch=BATCH_SIZE):
     """
     Experiment with 1.initial learning rate and 2.different learning rate schedulers
         - Use tensorboard to check learning rate and valid loss plots for stagnation
@@ -101,7 +101,7 @@ def model_training(dataset, model):
         labels[i, :1000] = torch.Tensor(sols[1]).view(-1) # bl_sol = 1000 items
         labels[i, 1000:] = torch.Tensor(sols[2]).view(-1) # bu_sol = 1000 items
 
-    print(f"\nDEBUG: model_training() started.\nhidden = {HIDDEN}, batch = {BATCH_SIZE}")
+    print(f"\nDEBUG: model_training() started.\nhidden = {hidden}, batch = {batch}")
 
     train_size = int(RATIO * len(data))
     valid_size = len(data) - train_size
@@ -111,12 +111,12 @@ def model_training(dataset, model):
     train_data, valid_data = random_split(td, [train_size, valid_size])
 
     # Create data loaders
-    train_load = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
-    valid_load = DataLoader(valid_data, batch_size=BATCH_SIZE, shuffle=False)
+    train_load = DataLoader(train_data, batch_size=batch, shuffle=True)
+    valid_load = DataLoader(valid_data, batch_size=batch, shuffle=False)
 
     # Model, loss, optimizer, scheduler:
     if not model:
-        model = BinaryNN(HIDDEN)
+        model = BinaryNN(hidden)
 
     loss_func = nn.BCELoss() # binary cross entropy loss func
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
@@ -179,15 +179,21 @@ def load_neural_net(dataset, index):
     input_t = torch.cat((start_t, lower_t, size_t))
 
     nn_mod, nn_pth = "", ""
+    nn_hid, nn_bat = 0 , 0
     bl_sol, bu_sol = [], []
     diff_min = float("inf")
 
     # Compare all model outputs in order
     for path in sorted(os.listdir("models")):
 
-        hidden = int(path.split("=")[0]) # hidden layer size (1st #)
-        model  = BinaryNN(hidden)
-        load   = torch.load(f"models/{path}")
+        split = path.split("=") # split path using "="
+        hidden= int(split[0])   # hidden layer (1st #)
+
+        split = split[1].split("_") # extract 2nd term
+        batch = int(split[1])   # batch size (2nd num)
+
+        model = BinaryNN(hidden)
+        load  = torch.load(f"models/{path}")
         model.load_state_dict(load)
 
         model.eval()
@@ -206,17 +212,17 @@ def load_neural_net(dataset, index):
         diff_avg = (diff_l + diff_u) / 2
         if diff_avg < diff_min:
 
-            nn_mod, nn_pth, bl_sol, bu_sol, diff_min = (
-            model , path  , bl_out, bu_out, diff_avg)
+            nn_mod, nn_pth, nn_hid, nn_bat, bl_sol, bu_sol, diff_min = (
+            model , path  , hidden, batch , bl_out, bu_out, diff_avg)
             
         print(f"\nDEBUG: differences in '{path}':\nbl_sol = {diff_l}, bu_sol = {diff_u}, diff_avg = {diff_avg}")
     
     print(f"\nDEBUG: best model = '{nn_pth}'")
     exit()
-    return nn_mod, bl_sol, bu_sol
+    return nn_mod, nn_hid, nn_bat, bl_sol, bu_sol
 
 
-def relaxed_problem(dataset, retrain):
+def relaxed_problem(dataset, retrain=False):
     # A MODIFIED motion planning problem
 
     index = random.randint(0, dataset.size - 1) # random sample solution
@@ -244,11 +250,12 @@ def relaxed_problem(dataset, retrain):
         state0.value = np.array(robot.state)
         goal0.value  = np.array(goal)
 
-        nn_mod, bl_sol, bu_sol = load_neural_net(dataset, index)
+        nn_mod, nn_hid, nn_bat, bl_sol, bu_sol = load_neural_net(dataset, index)
 
-        if retrain: # TODO: FIXME because this call is scuffed
-            model_training(dataset, model=nn_mod)
 
+        if retrain:
+            model_training(dataset, model=nn_mod, hidden=nn_hid, batch=nn_bat)
+            return
 
         for i in range(world.MAX):
             bool_low[i].value = np.array(bl_sol[i])
@@ -287,6 +294,6 @@ if __name__ == "__main__":
     dataset = Dataset()
     TRAIN = False
     if TRAIN:
-        model_training(dataset, model=None)
+        model_training(dataset)
     else:
         relaxed_problem(dataset, retrain=True)
