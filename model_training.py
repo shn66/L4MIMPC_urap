@@ -10,12 +10,15 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau as ReduceLR
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
 INPUTS = 44
-HIDDEN = 1024
+Hidden = 1024
 OUTPUT = 2000
 
-BATCH_SIZE = 1024
+Batch_Size = 1024
 LEARN_RATE = 0.001
 NUM_ITERS  = 100
+
+LOGITS = True
+NORMAL = False
 
 class Dataset:
     """
@@ -72,16 +75,18 @@ class BinaryNN(nn.Module):
             x = torch.relu(layer(x))
         
         # Output with sigmoid activation
+        if LOGITS:
+            return self.output(x)
         return torch.sigmoid(self.output(x))
 
 
-def model_training(dataset, model=None, hidden=HIDDEN, batch=BATCH_SIZE):
+def model_training(dataset, model=None, hidden=Hidden, batch=Batch_Size):
     """
     Experiment with 1.initial learning rate and 2.different learning rate schedulers
         - Use tensorboard to check learning rate and valid loss plots for stagnation
         - Normalize input along x and y axes before training, batch size around 1024
     """
-    PATH = f"models/XXX=hidden_XXX=batch_0.XXX=loss.pth"
+    PATH = f"models/{hidden}=hidden_{batch}=batch_0.XXX=loss_NEW.pth"
     RATIO = 0.8      # Split data -> 80% train, 20% valid
     S = dataset.size
     
@@ -119,9 +124,11 @@ def model_training(dataset, model=None, hidden=HIDDEN, batch=BATCH_SIZE):
         model = BinaryNN(hidden)
 
     loss_func = nn.BCELoss() # binary cross entropy loss func
-    optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
+    if LOGITS:
+        loss_func = nn.BCEWithLogitsLoss()
 
-    scheduler = ReduceLR(optimizer, patience=5)
+    optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
+    scheduler = ReduceLR(optimizer)
     best_loss = float('inf') # track the best validation loss
 
     # Start training loop
@@ -183,14 +190,16 @@ def load_neural_net(dataset, index):
     bl_sol, bu_sol = [], []
     diff_min = float("inf")
 
-    # Compare all model outputs in order
-    for path in sorted(os.listdir("models")):
+    # Compare all model outputs in order           # avoid .DS_Store
+    paths = [x for x in sorted(os.listdir("models")) if len(x) > 10]
 
+    for path in paths:
         split = path.split("=") # split path using "="
         hidden= int(split[0])   # hidden layer (1st #)
 
         split = split[1].split("_") # extract 2nd term
         batch = int(split[1])   # batch size (2nd num)
+
 
         model = BinaryNN(hidden)
         load  = torch.load(f"models/{path}")
@@ -199,7 +208,8 @@ def load_neural_net(dataset, index):
         model.eval()
         with torch.no_grad():
             output = model(input_t)
-
+            if LOGITS:
+                output = torch.sigmoid(output)
 
         output = (output > BOUND).float() # round (<0.5) to 0.0, (>0.5) to 1.0
 
@@ -218,7 +228,7 @@ def load_neural_net(dataset, index):
         print(f"\nDEBUG: differences in '{path}':\nbl_sol = {diff_l}, bu_sol = {diff_u}, diff_avg = {diff_avg}")
     
     print(f"\nDEBUG: best model = '{nn_pth}'")
-    exit()
+
     return nn_mod, nn_hid, nn_bat, bl_sol, bu_sol
 
 
@@ -292,8 +302,10 @@ def relaxed_problem(dataset, retrain=False):
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN = False
+    TRAIN   = True
+    RETRAIN = True
+
     if TRAIN:
         model_training(dataset)
     else:
-        relaxed_problem(dataset, retrain=True)
+        relaxed_problem(dataset, RETRAIN)
