@@ -1,4 +1,5 @@
-import os, copy
+import os
+import copy
 import torch
 import random
 import pickle
@@ -6,7 +7,8 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import motion_planning as mp
-from torch.optim.lr_scheduler import ReduceLROnPlateau as ReduceLR
+from torch.utils.tensorboard import SummaryWriter
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
 INPUTS = 44
@@ -15,10 +17,8 @@ OUTPUT = 2000
 NUM_ITERS  = 100
 LEARN_RATE = 0.001
 
-Hidden = 128
-Batch  = 128
 LOGITS = True  # LOGITS must be True
-NORMAL = False # if NORMAL is = True
+NORMAL = True  # if NORMAL is = True
 
 class Dataset:
     """
@@ -40,6 +40,24 @@ class Dataset:
 
         self.size = len(self.sols)
         print(f"DEBUG: Dataset initialized. {self.size} datapoints read.")
+
+    
+    def normalize(self, index):
+        lower_arr = copy.deepcopy(self.info[2])
+        size_arr  = copy.deepcopy(dataset.info[3])
+        state = copy.deepcopy(self.sols[index][0])
+
+        lower_arr[0] = [(x-7.75) / 9.75 for x in lower_arr[0]]  # 20 = range[-2.0, 17.5]
+        size_arr[0]  = [(x-1.25) / 2.5 for x in size_arr[0]]    # 2.5 = range[0.0, 2.5]
+
+        # along y-axis
+        lower_arr[1] = [y / 5 for y in lower_arr[1]]            # 5 = range[-5.0, 5.0]
+        size_arr[1]  = [(y-3.5) / 3.5 for y in size_arr[1]]     # 7 = range[0.0, 7.0]
+
+        state[0] = (state[0]-10)/ 10                            # 20 = range[0.0, 20.0]
+        state[1] /= 5                                           # 5 = range[-5.0, 5.0]
+
+        return state, lower_arr, size_arr
 
 
 class BinaryNN(nn.Module):
@@ -87,11 +105,11 @@ def get_model_type():
         return "first"
 
 
-def model_training(dataset, model=None, hidden=Hidden, batch=Batch):
+def model_training(dataset, hidden, batch, model=None):
     TYPE = get_model_type()
     SIZE = dataset.size
 
-    PATH = f"models/{TYPE}/{hidden}=hidden_{batch}=batch_0.XXX=loss.pth"
+    PATH = f"models/{TYPE}/{hidden}=hidden_{batch}=batch_NEW=loss.pth"
     BOUND= 0.8 # Split data -> 80% train, 20% valid
     
     # Extract data & labels in dataset
@@ -99,35 +117,26 @@ def model_training(dataset, model=None, hidden=Hidden, batch=Batch):
     labels = torch.zeros((SIZE, OUTPUT)) # output = 2000 (bl_sol + bu_sol)
 
     for i in range(SIZE):
-        lower_arr = copy.deepcopy(dataset.info[2])
-        size_arr  = copy.deepcopy(dataset.info[3])
+        lower_arr = dataset.info[2]
+        size_arr  = dataset.info[3]
 
-        if NORMAL: # along x-axis
-            lower_arr[0] = [x / 20 for x in lower_arr[0]] # 20 = range[-2.0, 17.5]
-            size_arr[0]  = [x / 2.5 for x in size_arr[0]] # 2.5 = range[0.0, 2.5]
+        sols  = dataset.sols[i]
+        state, bl_sol, bu_sol = sols[0], sols[1], sols[2]
 
-            # along y-axis
-            lower_arr[1] = [y / 5 for y in lower_arr[1]]  # 5 = range[-5.0, 5.0]
-            size_arr[1]  = [y / 7 for y in size_arr[1]]   # 7 = range[0.0, 7.0]
+        if NORMAL:
+            state, lower_arr, size_arr = dataset.normalize(i)
 
         # Extract lower_arr & size_arr          .view(-1): arr to 1D
         data[i, 0: 20] = torch.Tensor(lower_arr).view(-1) # 20 items
         data[i, 20:40] = torch.Tensor(size_arr ).view(-1) # 20 items
 
         # Extract state, bl and bu_sol
-        sols  = dataset.sols[i]
-        state = copy.deepcopy(sols[0])
-        bl_sol, bu_sol = sols[1], sols[2]
-
-
-        if NORMAL:
-            state[0] /= 20 # 20 = range[0.0, 20.0]
-            state[1] /= 5  # 5 = range[-5.0, 5.0]
         data[i, 40:44]   = torch.Tensor(state ).view(-1) # 4 items
         
         # Extract bl_sol & bu_sol also         .view(-1): arr into 1D
         labels[i, :1000] = torch.Tensor(bl_sol).view(-1) # 1000 items
         labels[i, 1000:] = torch.Tensor(bu_sol).view(-1) # 1000 items
+
 
     print(f"\nDEBUG: model_training() started.\n{TYPE} = TYPE, {hidden} = hidden, {batch} = batch")
 
@@ -150,9 +159,11 @@ def model_training(dataset, model=None, hidden=Hidden, batch=Batch):
         loss_func = nn.BCEWithLogitsLoss() # BCE with sigmoid
 
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
-    scheduler = ReduceLR(optimizer)
+    scheduler = ReduceLROnPlateau(optimizer)
     best_loss = float('inf') # track the best validation loss
 
+
+    writer = SummaryWriter(f"runs/{TYPE}")
 
     # Start training loop
     for i in range(NUM_ITERS):
@@ -182,17 +193,27 @@ def model_training(dataset, model=None, hidden=Hidden, batch=Batch):
                 loss = loss_func(output, target)
                 valid_loss += loss.item()
 
+
         scheduler.step(valid_loss) # update scheduler and LR
         
         if valid_loss < best_loss: # saves least lossy model
             best_loss = valid_loss
             torch.save(model.state_dict(), PATH)
+
+        lr = optimizer.param_groups[0]['lr']
+        tl = train_loss / len(train_load)
+        vl = valid_loss / len(valid_load)
+
+        writer.add_scalar('learn_rate', lr, i)
+        writer.add_scalar('train_loss', tl, i)
+        writer.add_scalar('valid_loss', vl, i)
         
         print(f"\niter = {i + 1}/{NUM_ITERS}")
-        print(f"LR   = {optimizer.param_groups[0]['lr']}")
-        print(f"train_loss = {round(train_loss / len(train_load), 4)}")
-        print(f"valid_loss = {round(valid_loss / len(valid_load), 4)}")
+        print(f"learn_rate = {round(lr, 4)}")
+        print(f"train_loss = {round(tl, 4)}")
+        print(f"valid_loss = {round(vl, 4)}")
 
+    writer.close()
     print("\nmodel_training() finished.")
 
 
@@ -201,9 +222,11 @@ def load_neural_net(dataset, index):
     BOUND = 0.5
 
     sols  = dataset.sols[index] # sample solution of relaxed_problem
-    _, _, lower_arr, size_arr = dataset.info
+    #_, _, lower_arr, size_arr = dataset.info
 
-    start_t = torch.Tensor(sols[0]  ).view(-1) # idx 0 = start state
+    state, lower_arr, size_arr = dataset.normalize(index)
+
+    start_t = torch.Tensor(state).view(-1) # idx 0 = start state
     lower_t = torch.Tensor(lower_arr).view(-1)
     size_t  = torch.Tensor(size_arr ).view(-1)
 
@@ -237,7 +260,7 @@ def load_neural_net(dataset, index):
             if LOGITS: # needs sigmoid fn also
                 output = torch.sigmoid(output)
 
-        output = (output > BOUND).float() # round (<0.5) to 0.0, (>0.5) to 1.0
+        output = (output >= BOUND).float() # round (<0.5) to 0.0, (>=0.5) to 1.0
 
         bl_out = output[:1000].view(10, 2, 50).tolist() # reshape to multi-dim
         bu_out = output[1000:].view(10, 2, 50).tolist() # and converts to list
@@ -289,7 +312,7 @@ def relaxed_problem(dataset, retrain=False):
 
 
         if retrain:
-            model_training(dataset, model=nn_mod, hidden=nn_hid, batch=nn_bat)
+            model_training(dataset, nn_hid, nn_bat, model=nn_mod)
             return
 
         for i in range(world.MAX):
@@ -332,8 +355,5 @@ if __name__ == "__main__":
 
     if TRAIN:
         model_training(dataset, hidden=128, batch=128)
-        model_training(dataset, hidden=128, batch=1024)
-        model_training(dataset, hidden=1024, batch=128)
-        model_training(dataset, hidden=1024, batch=1024)
     else:
         relaxed_problem(dataset, RETRAIN)
