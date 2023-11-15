@@ -168,7 +168,7 @@ def model_training(dataset, hidden, batch, model=None):
     best_loss = float('inf') # Keep best validation loss
 
     writer = SummaryWriter(f"runs/{TYPE}")
-    writer.add_text(f"{hidden} = hidden, {batch} = batch")
+    #writer.add_text(f"{hidden} = hidden, {batch} = batch")
 
     for i in range(NUM_ITERS):
         model.train()
