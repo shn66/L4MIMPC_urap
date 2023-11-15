@@ -1,4 +1,5 @@
-import os, copy
+import os
+import copy
 import torch
 import random
 import pickle
@@ -6,7 +7,6 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import motion_planning as mp
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset, random_split
@@ -17,8 +17,8 @@ OUTPUT = 2000
 NUM_ITERS  = 100
 LEARN_RATE = 0.001
 
-LOGITS = True  # LOGITS must be True
-Normal = False # if NORMAL is = True
+LOGITS = True # LOGITS must be True
+NORMAL = True # if NORMAL is = True
 
 class Dataset:
     """
@@ -62,15 +62,14 @@ class Dataset:
 
 
     def get_type(self):
-        if not LOGITS and Normal:
+        if not LOGITS and NORMAL:
             print("\nERROR: LOGITS must be True if NORMAL is True"); exit()
-        elif LOGITS and Normal:
+        elif LOGITS and NORMAL:
             return "normal"
-        elif LOGITS and not Normal:
+        elif LOGITS and not NORMAL:
             return "logits"
         else:
             return "first"
-
 
 
 class BinaryNN(nn.Module):
@@ -101,19 +100,19 @@ class BinaryNN(nn.Module):
     def forward(self, x):
         # Input, hidden: ReLU activation
         x = self.input(x)
-        if Normal:
+        if NORMAL:
             x = self.norm_1(x)
         x = torch.relu(x)
 
         for i in range(0, len(self.modlst), 2):
             x = self.modlst[i](x)         # Apply linear layers
-            if Normal:
+            if NORMAL:
                 x = self.modlst[i + 1](x) # Batch normalization
             x = torch.relu(x)
         
         # Output with sigmoid activation
         x = self.output(x)
-        if Normal:
+        if NORMAL:
             x = self.norm_2(x)
         if LOGITS:
             return x
@@ -358,17 +357,7 @@ if __name__ == "__main__":
     RETRAIN = True
 
     if TRAIN:
-        model_training(dataset, hidden=128, batch=128)
-        model_training(dataset, hidden=128, batch=1024)
-        model_training(dataset, hidden=1024, batch=128)
-        model_training(dataset, hidden=1024, batch=1024)
-
         dataset.normalize()
-        Normal = True
-
-        model_training(dataset, hidden=128, batch=128)
-        model_training(dataset, hidden=128, batch=1024)
-        model_training(dataset, hidden=1024, batch=128)
         model_training(dataset, hidden=1024, batch=1024)
     else:
         relaxed_problem(dataset, RETRAIN)
