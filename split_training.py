@@ -1,4 +1,5 @@
-import os, re
+import os
+import re
 import copy
 import torch
 import random
@@ -7,6 +8,8 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import motion_planning as mp
+import torch.nn.functional as fn
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset, random_split
@@ -85,29 +88,29 @@ class BinaryNN(nn.Module):
 
 
     def forward(self, x):
-        x = torch.relu(self.normal(self.input(x)))
+        x = self.normal(self.input(x))
+        x = torch.relu(x)
 
         for layer in self.modlst:
             x = torch.relu(layer(x))
         return self.output(x)
     
 
-def model_training(dataset, batch, is_low, layers, hidden=100, model=None):
-    SIZE = dataset.size
-    BOUND= 0.8 # Split data -> 80% train, 20% valid
+def model_training(dataset, layers, batch, is_low, hidden=100, model=None):
+    SIZE  = dataset.size
+    BOUND = 0.8          # Split data -> 80% train, 20% valid
 
     if not os.path.exists(f"models/{DIR}"):
         os.mkdir(f"models/{DIR}")
 
-    PATH = f"models/{DIR}/{layers}=layers_{hidden}=hidden_{batch}=batch_{is_low}=is_low.pth"
+    PATH = f"models/{DIR}/{is_low}=is_low_{layers}=layers_{hidden}=hidden_{batch}=batch.pth"
     
     data   = torch.zeros((SIZE, INPUTS)) # Inputs = 44  (state + obs_arrs)
-    labels = torch.zeros((SIZE, OUTPUT)) # Output = 2000 (bl_sol + bu_sol)
+    labels = torch.zeros((SIZE, OUTPUT)) # Output = 1000 (bl_sol | bu_sol)
 
     for i in range(SIZE):
-        # Sample solution at dataset index i
+        sols = dataset.sols[i] # Sample solution at dataset index i
 
-        sols = dataset.sols[i]
         state, bl_sol, bu_sol = sols[0], sols[1], sols[2]
         _, _, lower_arr, size_arr = dataset.info
 
@@ -125,10 +128,9 @@ def model_training(dataset, batch, is_low, layers, hidden=100, model=None):
     train_size = int(BOUND * len(data))
     valid_size = len(data) - train_size
 
+
     td = TensorDataset(data, labels)
     train_data, valid_data = random_split(td, [train_size, valid_size])
-
-
 
     train_load = DataLoader(train_data, batch_size=batch, shuffle=True)
     valid_load = DataLoader(valid_data, batch_size=batch, shuffle=False)
@@ -193,39 +195,63 @@ def model_training(dataset, batch, is_low, layers, hidden=100, model=None):
     writer.close()
     print("\nmodel_training() finished.")
 
+def get_output_view(output, split, sols):
+    bl_out, bu_out = [], []
 
-def load_neural_net(dataset):
+    if split:
+        bl_out = output.view(10, 2, 50).tolist()
+        bu_out = output.view(10, 2, 50).tolist()
+    else:
+        bl_out = output[:1000].view(10, 2, 50).tolist()    # Reshape to multi-dim
+        bu_out = output[1000:].view(10, 2, 50).tolist()    # Then convert to list
+
+    diff_l = np.sum(np.array(bl_out) != np.array(sols[1])) # Compares differences
+    diff_u = np.sum(np.array(bu_out) != np.array(sols[2])) # in NN and data b_sol
+
+    view_l = []
+    view_u = []
+
+    return bl_out, bu_out, diff_l, diff_u, view_l, view_u
+
+def load_neural_net(dataset, verbose):
+    SPLIT = DIR == "split_train"
     BOUND = 0.5
 
-    nn_mod, nn_pth = "", ""
-    nn_hid, nn_bat = 0 , 0
-    bl_sol, bu_sol = [], []
-    diff_min = float("inf")
+    nn_mod, nn_pth = "", ""   # Best model and path
+    nn_hid, nn_bat = 0 , 0    # Best hidden and batch
+    bl_sol, bu_sol = [], []   # Best bl_sol and bu_sol
+    diff_min = float("inf")   # Best diff from original
+    bl_view, bu_view = [], [] # Arrays of expanded diffs
 
     folder = sorted(os.listdir(f"models/{DIR}")) # Same path/types only
     folder = [x for x in folder if len(x) > 10]  # Except for .DS_Store
 
     for path in folder:
+        bl_out, bu_out = [], []
         diff_l, diff_u = 0.0, 0.0                # Running sum of diffs
+        view_l, view_u = [], []                  # Keep all diff arrays\
 
-        digits = re.findall(r"(\d+)=", path)     # finds digits followed by "="
+        digits = re.findall(r"(\d+)=", path)     # Find digit after "="
         layers, hidden, batch = map(int, digits)
 
-        for _ in range(NUM_ITERS):
+        if SPLIT:
+            path0  = path.split("=") # Find is_low(1st num)
+            is_low = eval(path0[0])  # evaluate boolean str
+
+        for i in range(NUM_ITERS):   # Sample solution from random index:
             index = random.randint(0, dataset.size - 1)
 
-            # Sample solution from random index^
             sols = dataset.sols[index]
             state, bl_sol, bu_sol = sols[0], sols[1], sols[2]
             _, _, lower_arr, size_arr = dataset.info
+
 
             start_t = torch.Tensor(state).view(-1)
             lower_t = torch.Tensor(lower_arr).view(-1)
             size_t  = torch.Tensor(size_arr ).view(-1)
 
             input_t = torch.cat((start_t, lower_t, size_t))
-            input_t = input_t.unsqueeze(0) # Add batch dim->input
-
+            input_t = input_t.unsqueeze(0)     # Add batch dim->input
 
             model = BinaryNN(layers, hidden)
             load  = torch.load(f"models/{DIR}/{path}")
@@ -238,22 +264,35 @@ def load_neural_net(dataset):
             output = output.view(-1)           # Remove the batch dim
             output = (output >= BOUND).float() # Rounds (<0.5) to 0, (>= 0.5) to 1
 
-            bl_out = output[:1000].view(10, 2, 50).tolist() # Reshape to multi-dim
-            bu_out = output[1000:].view(10, 2, 50).tolist() # Then convert to list
+            bl_out, bu_out, dl, du, vl, vu = get_output_view(output, SPLIT, sols)
+            diff_l += dl
+            diff_u += du
 
-            diff_l += np.sum(np.array(bl_out) != np.array(sols[1])) # Compares differences
-            diff_u += np.sum(np.array(bu_out) != np.array(sols[2])) # in NN and data b_sol
+            if i == 0:
+                view_l.append(vl)
+                view_u.append(vu)
 
-        diff_avg = (diff_l + diff_u) / (2 * NUM_ITERS)
+        if SPLIT:
+            if is_low:
+                print(f"\nDEBUG: differences in '{DIR}/{path}':\nbl_sol = {diff_l / NUM_ITERS}")
+            else:
+                print(f"\nDEBUG: differences in '{DIR}/{path}':\nbu_sol = {diff_u / NUM_ITERS}")
+        else:
+            diff_avg = (diff_l + diff_u) / (2 * NUM_ITERS)
 
-        if diff_avg < diff_min:
-            nn_mod, nn_pth, nn_hid, nn_bat, bl_sol, bu_sol, diff_min = (
-            model , path  , hidden, batch , bl_out, bu_out, diff_avg)
+            if diff_avg < diff_min:
+                nn_mod, nn_pth, nn_hid, nn_bat, bl_sol, bu_sol, diff_min, bl_view, bu_view = (
+                model , path  , hidden, batch , bl_out, bu_out, diff_avg, view_l , view_u)
         
-        print(f"\nDEBUG: differences in '{DIR}/{path}':\nbl_sol = {diff_l / NUM_ITERS}, bu_sol = {diff_u / NUM_ITERS}, diff_avg = {diff_avg}")
+            print(f"\nDEBUG: differences in '{DIR}/{path}':\nbl_sol = {diff_l / NUM_ITERS}, bu_sol = {diff_u / NUM_ITERS}, diff_avg = {diff_avg}")
 
-    print(f"\nDEBUG: best model = '{nn_pth}'")
-    return nn_mod, nn_hid, nn_bat, bl_sol, bu_sol
+            if verbose:
+                print(f"\n{bl_view}, {bu_view}")
+    if SPLIT:
+        exit()
+    else:
+        print(f"\nDEBUG: best model = '{nn_pth}'")
+        return nn_mod, nn_hid, nn_bat, bl_sol, bu_sol
 
 
 def relaxed_problem(dataset, retrain):
@@ -326,12 +365,12 @@ def relaxed_problem(dataset, retrain):
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN   = True
+    TRAIN   = False
 
     if TRAIN:
-        for batch in [1024, 2048]:
-            for is_low in [False, True]:
-                for layers in [10, 15]:
-                    model_training(dataset, batch, is_low, layers)
+        for layers in [10, 15]:
+            for batch in [1024, 2048]:
+                for is_low in [False, True]:
+                    model_training(dataset, layers, batch, is_low)
     else:
-        load_neural_net(dataset)
+        load_neural_net(dataset, verbose=False)
