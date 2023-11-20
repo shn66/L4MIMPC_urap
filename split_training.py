@@ -1,5 +1,4 @@
-import os
-import re
+import os, re
 import copy
 import torch
 import random
@@ -8,16 +7,15 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import motion_planning as mp
-import torch.nn.functional as fn
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
 INPUTS = 44
-OUTPUT = 2000
+OUTPUT = 1000
 NUM_ITERS  = 100
 LEARN_RATE = 0.001
-DIR = "new_models"
+DIR = "split_train"
 
 class Dataset:
     """
@@ -65,12 +63,8 @@ class Dataset:
 
 class BinaryNN(nn.Module):
 
-    def __init__(self, layers, hidden, drops, activ):
+    def __init__(self, layers, hidden):
         super(BinaryNN, self).__init__()
-        self.activ   = activ
-
-        self.drops   = drops
-        self.dropout = nn.Dropout(0.5)
         
         # Input size = 44:
             # lower_arr shape = (2, 10) = 20
@@ -91,26 +85,21 @@ class BinaryNN(nn.Module):
 
 
     def forward(self, x):
-        x = self.activ(self.normal(self.input(x)))
+        x = torch.relu(self.normal(self.input(x)))
 
         for layer in self.modlst:
-            if self.drops:
-                x = self.dropout(x)
             x = torch.relu(layer(x))
         return self.output(x)
     
 
-def model_training(dataset, batch, drops, activ, optiv, layers=10, hidden=100, model=None):
+def model_training(dataset, batch, is_low, layers, hidden=100, model=None):
     SIZE = dataset.size
     BOUND= 0.8 # Split data -> 80% train, 20% valid
 
     if not os.path.exists(f"models/{DIR}"):
         os.mkdir(f"models/{DIR}")
 
-    activ_str = str(activ).split(" ")[1]       # Don't ask how
-    optiv_str = str(optiv).split(".")[-1][:-2] # this works idk
-
-    PATH = f"models/{DIR}/{batch}=batch_{drops}=drops_{activ_str}=activ_{optiv_str}=optiv.pth"
+    PATH = f"models/{DIR}/{layers}=layers_{hidden}=hidden_{batch}=batch_{is_low}=is_low.pth"
     
     data   = torch.zeros((SIZE, INPUTS)) # Inputs = 44  (state + obs_arrs)
     labels = torch.zeros((SIZE, OUTPUT)) # Output = 2000 (bl_sol + bu_sol)
@@ -126,8 +115,10 @@ def model_training(dataset, batch, drops, activ, optiv, layers=10, hidden=100, m
         data[i, 20:40] = torch.Tensor(size_arr ).view(-1) # 20 items
         data[i, 40:44] = torch.Tensor(state).view(-1)     # 4 items
 
-        labels[i, :1000] = torch.Tensor(bl_sol).view(-1)  # 1000 items
-        labels[i, 1000:] = torch.Tensor(bu_sol).view(-1)  # 1000 items
+        if is_low:
+            labels[i] = torch.Tensor(bl_sol).view(-1)  # 1000 items
+        else:
+            labels[i] = torch.Tensor(bu_sol).view(-1)  # 1000 items
 
     print(f"\nDEBUG: model_training() started. PATH =\n{PATH}")
 
@@ -143,12 +134,12 @@ def model_training(dataset, batch, drops, activ, optiv, layers=10, hidden=100, m
     valid_load = DataLoader(valid_data, batch_size=batch, shuffle=False)
 
     if not model:
-        model = BinaryNN(layers, hidden, drops, activ)
+        model = BinaryNN(layers, hidden)
 
     nnBCELoss = nn.BCELoss() # Binary cross entropy loss
     logitLoss = nn.BCEWithLogitsLoss() # BCE and sigmoid
 
-    optimizer = optiv(model.parameters(), lr=LEARN_RATE)
+    optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 
     scheduler = ReduceLROnPlateau(optimizer) # Update LR
     best_loss = float('inf') # Keep best validation loss
@@ -332,15 +323,6 @@ def relaxed_problem(dataset, retrain):
         # 1st value in arr(    x_accel    ,    y_accel     )
         world.plot_problem(state_sol, start, goal)
 
-"""
-Best models from training (best 3 out of 5):
-- basic_norm:
-    - 10 layers, 128 hidden, 1024 batch
-- focus_norm:
-    - 10 layers, 96 hidden, 1024 OR 2048 batch
-- new_models:
-
-"""
 
 if __name__ == "__main__":
     dataset = Dataset()
@@ -348,9 +330,8 @@ if __name__ == "__main__":
 
     if TRAIN:
         for batch in [1024, 2048]:
-            for drops in [False, True]:
-                for activ in [fn.leaky_relu, fn.gelu]:
-                    for optiv in [optim.SGD, optim.RMSprop]:
-                        model_training(dataset, batch, drops, activ, optiv)
+            for is_low in [False, True]:
+                for layers in [10, 15]:
+                    model_training(dataset, batch, is_low, layers)
     else:
         load_neural_net(dataset)
