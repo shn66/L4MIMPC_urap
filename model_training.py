@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 import motion_planning as mp
 import torch.nn.functional as fn
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset, random_split
@@ -91,24 +92,26 @@ class BinaryNN(nn.Module):
 
 
     def forward(self, x):
-        x = self.activ(self.normal(self.input(x)))
+        x = self.normal(self.input(x))
+        x = self.activ(x)
 
         for layer in self.modlst:
             if self.drops:
                 x = self.dropout(x)
-            x = torch.relu(layer(x))
+
+            x = self.activ(layer(x))
         return self.output(x)
     
 
-def model_training(dataset, batch, drops, activ, optiv, layers=10, hidden=100, model=None):
-    SIZE = dataset.size
-    BOUND= 0.8 # Split data -> 80% train, 20% valid
+def model_training(dataset, drops, activ, optiv, layers=10, hidden=100, batch=1024, model=None):
+    SIZE  = dataset.size
+    BOUND = 0.8          # Split data -> 80% train, 20% valid
 
     if not os.path.exists(f"models/{DIR}"):
         os.mkdir(f"models/{DIR}")
 
-    activ_str = str(activ).split(" ")[1]       # Don't ask how
-    optiv_str = str(optiv).split(".")[-1][:-2] # this works idk
+    activ_str = str(activ).split(" ")[1]       # Name of activ. func.
+    optiv_str = str(optiv).split(".")[-1][:-2] # Name of optim. class
 
     PATH = f"models/{DIR}/{batch}=batch_{drops}=drops_{activ_str}=activ_{optiv_str}=optiv.pth"
     
@@ -116,9 +119,8 @@ def model_training(dataset, batch, drops, activ, optiv, layers=10, hidden=100, m
     labels = torch.zeros((SIZE, OUTPUT)) # Output = 2000 (bl_sol + bu_sol)
 
     for i in range(SIZE):
-        # Sample solution at dataset index i
+        sols = dataset.sols[i] # Sample solution at dataset index i
 
-        sols = dataset.sols[i]
         state, bl_sol, bu_sol = sols[0], sols[1], sols[2]
         _, _, lower_arr, size_arr = dataset.info
 
@@ -134,10 +136,9 @@ def model_training(dataset, batch, drops, activ, optiv, layers=10, hidden=100, m
     train_size = int(BOUND * len(data))
     valid_size = len(data) - train_size
 
+
     td = TensorDataset(data, labels)
     train_data, valid_data = random_split(td, [train_size, valid_size])
-
-
 
     train_load = DataLoader(train_data, batch_size=batch, shuffle=True)
     valid_load = DataLoader(valid_data, batch_size=batch, shuffle=False)
@@ -203,6 +204,31 @@ def model_training(dataset, batch, drops, activ, optiv, layers=10, hidden=100, m
     print("\nmodel_training() finished.")
 
 
+def get_model_info(path):
+    layers, hidden, batch = 10, 100, -1
+    drops , activ = None, None
+
+    if DIR == "new_models":
+        path0 = path.split("=")
+        batch = int(path0[0])       # Batch size (1st num)
+
+        path1 = path0[1].split("_")
+        drops = eval(path1[1])      # is_dropout (2nd val)
+
+        path2 = path0[2].split("_")
+        str = path2[1]              # Activ func (3rd val)
+        
+        if str == "leaky":
+            activ = fn.leaky_relu
+        elif str == "function":
+            activ = fn.gelu
+    else:
+        digits = re.findall(r"(\d+)=", path)     # Find digit after "="
+        layers, hidden, batch = map(int, digits)
+
+    return layers, hidden, batch, drops, activ
+
+
 def load_neural_net(dataset):
     BOUND = 0.5
 
@@ -217,13 +243,11 @@ def load_neural_net(dataset):
     for path in folder:
         diff_l, diff_u = 0.0, 0.0                # Running sum of diffs
 
-        digits = re.findall(r"(\d+)=", path)     # finds digits followed by "="
-        layers, hidden, batch = map(int, digits)
+        layers, hidden, batch, drops, activ = get_model_info(path)
 
-        for _ in range(NUM_ITERS):
+        for _ in range(NUM_ITERS): # Sample solution from random index:
             index = random.randint(0, dataset.size - 1)
 
-            # Sample solution from random index^
             sols = dataset.sols[index]
             state, bl_sol, bu_sol = sols[0], sols[1], sols[2]
             _, _, lower_arr, size_arr = dataset.info
@@ -233,11 +257,15 @@ def load_neural_net(dataset):
             size_t  = torch.Tensor(size_arr ).view(-1)
 
             input_t = torch.cat((start_t, lower_t, size_t))
-            input_t = input_t.unsqueeze(0) # Add batch dim->input
+            input_t = input_t.unsqueeze(0)       # Add batch dim->input
 
 
-            model = BinaryNN(layers, hidden)
-            load  = torch.load(f"models/{DIR}/{path}")
+            if DIR == "new_models":
+                model = BinaryNN(layers, hidden, drops, activ)
+            else:
+                model = BinaryNN(layers, hidden, False, fn.relu)
+            
+            load = torch.load(f"models/{DIR}/{path}")
             model.load_state_dict(load)
 
             model.eval()
@@ -333,24 +361,23 @@ def relaxed_problem(dataset, retrain):
         world.plot_problem(state_sol, start, goal)
 
 """
-Best models from training (best 3 out of 5):
+Best models from training (best 3 out of 5)
 - basic_norm:
     - 10 layers, 128 hidden, 1024 batch
 - focus_norm:
     - 10 layers, 96 hidden, 1024 OR 2048 batch
 - new_models:
-
+    - SGD is terrible, average difference: 500
 """
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN   = True
+    TRAIN   = False
 
     if TRAIN:
-        for batch in [1024, 2048]:
-            for drops in [False, True]:
-                for activ in [fn.leaky_relu, fn.gelu]:
-                    for optiv in [optim.SGD, optim.RMSprop]:
-                        model_training(dataset, batch, drops, activ, optiv)
+        for drops in [False, True]:
+            for activ in [fn.leaky_relu, fn.gelu]:
+                for optiv in [optim.Adam, optim.RMSprop]:
+                    model_training(dataset, drops, activ, optiv)
     else:
         load_neural_net(dataset)
