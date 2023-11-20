@@ -15,7 +15,7 @@ INPUTS = 44
 OUTPUT = 2000
 NUM_ITERS  = 100
 LEARN_RATE = 0.001
-DIR = "basic_norm"
+DIR = "focus_norm"
 
 class Dataset:
     """
@@ -321,12 +321,12 @@ def relaxed_problem(dataset, retrain):
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN   = True
+    TRAIN   = False
 
     if TRAIN:
-        for layers in [10, 16]:
-            for hidden in [128, 512]:
-                for batch in [512, 1024]:
+        for layers in [10]:
+            for hidden in [64, 96, 128]:
+                for batch in [1024, 1536, 2048]:
                     model_training(dataset, layers, hidden, batch)
     else:
         load_neural_net(dataset)
