@@ -1,4 +1,6 @@
-import os, copy
+import os
+import re
+import copy
 import torch
 import random
 import pickle
@@ -6,19 +8,16 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import motion_planning as mp
-from torch.optim.lr_scheduler import ReduceLROnPlateau as ReduceLR
+import torch.nn.functional as fn
+from torch.utils.tensorboard import SummaryWriter
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
 INPUTS = 44
-LAYERS = 10
 OUTPUT = 2000
 NUM_ITERS  = 100
 LEARN_RATE = 0.001
-
-Hidden = 128
-Batch  = 128
-LOGITS = True  # LOGITS must be True
-NORMAL = False # if NORMAL is = True
+DIR = "new_models"
 
 class Dataset:
     """
@@ -41,21 +40,49 @@ class Dataset:
         self.size = len(self.sols)
         print(f"DEBUG: Dataset initialized. {self.size} datapoints read.")
 
+    
+    def normalize(self):
+        exit()
+        print("\nDEBUG: Dataset normalizing.")
+
+        lower_arr = self.info[2]
+        size_arr  = self.info[3]
+
+        norm = lambda x, min, max: 2*(x-min)/(max-min)-1 # Normalize between [-1, 1]
+
+        lower_arr[0] = [norm(x,-2.0,17.5) for x in lower_arr[0]] # range[-2.0, 17.5]
+        size_arr[0]  = [norm(x, 0.0, 2.5) for x in size_arr[0]]  # range[0.0, 2.5]
+
+        lower_arr[1] = [norm(y,-5.0, 5.0) for y in lower_arr[1]] # range[-5.0, 5.0]
+        size_arr[1]  = [norm(y, 0.0, 7.0) for y in size_arr[1]]  # range[0.0, 7.0]
+
+        for i in range(self.size):
+            state = self.sols[i][0]
+
+            state[0] = norm(state[0], 0.0, 20.0) # range[0.0, 20.0]
+            state[1] = norm(state[1], -5.0, 5.0) # range[-5.0, 5.0]
+
 
 class BinaryNN(nn.Module):
 
-    def __init__(self, hidden):
+    def __init__(self, layers, hidden, drops, activ):
         super(BinaryNN, self).__init__()
+        self.activ   = activ
+
+        self.drops   = drops
+        self.dropout = nn.Dropout(0.5)
         
         # Input size = 44:
             # lower_arr shape = (2, 10) = 20
             # size_arr  shape = (2, 10) = 20
             # state_arr shape = (4,)    = 4
         self.input  = nn.Linear(INPUTS, hidden)
-        
-        self.hidden = nn.ModuleList()
-        for _ in range(LAYERS): # args: (input,  output)
-            self.hidden.append(nn.Linear(hidden, hidden))
+
+        self.normal = nn.BatchNorm1d(hidden)
+        self.modlst = nn.ModuleList()
+
+        for _ in range(layers): # args: (input,  output)
+            self.modlst.append(nn.Linear(hidden, hidden))
         
         # Output size = 2000:
             # bl_sol shape = (10, 2, 50) = 1000
@@ -64,72 +91,45 @@ class BinaryNN(nn.Module):
 
 
     def forward(self, x):
-        # Input and hidden: ReLU func
-        x = torch.relu(self.input(x))
+        x = self.activ(self.normal(self.input(x)))
 
-        for layer in self.hidden:
+        for layer in self.modlst:
+            if self.drops:
+                x = self.dropout(x)
             x = torch.relu(layer(x))
-        
-        # Output with sigmoid activation
-        if LOGITS:
-            return self.output(x)
-        return torch.sigmoid(self.output(x))
-
-
-def get_model_type():
-    if not LOGITS and NORMAL:
-        print("\nERROR: LOGITS must be True if NORMAL is = True"); exit()
-    elif LOGITS and NORMAL:
-        return "normal"
-    elif LOGITS and not NORMAL:
-        return "logits"
-    else:
-        return "first"
-
-
-def model_training(dataset, model=None, hidden=Hidden, batch=Batch):
-    TYPE = get_model_type()
-    SIZE = dataset.size
-
-    PATH = f"models/{TYPE}/{hidden}=hidden_{batch}=batch_0.XXX=loss.pth"
-    BOUND= 0.8 # Split data -> 80% train, 20% valid
+        return self.output(x)
     
-    # Extract data & labels in dataset
-    data   = torch.zeros((SIZE, INPUTS)) # inputs = 44  (state + obs_arrs)
-    labels = torch.zeros((SIZE, OUTPUT)) # output = 2000 (bl_sol + bu_sol)
+
+def model_training(dataset, batch, drops, activ, optiv, layers=10, hidden=100, model=None):
+    SIZE = dataset.size
+    BOUND= 0.8 # Split data -> 80% train, 20% valid
+
+    if not os.path.exists(f"models/{DIR}"):
+        os.mkdir(f"models/{DIR}")
+
+    activ_str = str(activ).split(" ")[1]       # Don't ask how
+    optiv_str = str(optiv).split(".")[-1][:-2] # this works idk
+
+    PATH = f"models/{DIR}/{batch}=batch_{drops}=drops_{activ_str}=activ_{optiv_str}=optiv.pth"
+    
+    data   = torch.zeros((SIZE, INPUTS)) # Inputs = 44  (state + obs_arrs)
+    labels = torch.zeros((SIZE, OUTPUT)) # Output = 2000 (bl_sol + bu_sol)
 
     for i in range(SIZE):
-        lower_arr = copy.deepcopy(dataset.info[2])
-        size_arr  = copy.deepcopy(dataset.info[3])
+        # Sample solution at dataset index i
 
-        if NORMAL: # along x-axis
-            lower_arr[0] = [x / 20 for x in lower_arr[0]] # 20 = range[-2.0, 17.5]
-            size_arr[0]  = [x / 2.5 for x in size_arr[0]] # 2.5 = range[0.0, 2.5]
+        sols = dataset.sols[i]
+        state, bl_sol, bu_sol = sols[0], sols[1], sols[2]
+        _, _, lower_arr, size_arr = dataset.info
 
-            # along y-axis
-            lower_arr[1] = [y / 5 for y in lower_arr[1]]  # 5 = range[-5.0, 5.0]
-            size_arr[1]  = [y / 7 for y in size_arr[1]]   # 7 = range[0.0, 7.0]
-
-        # Extract lower_arr & size_arr          .view(-1): arr to 1D
         data[i, 0: 20] = torch.Tensor(lower_arr).view(-1) # 20 items
         data[i, 20:40] = torch.Tensor(size_arr ).view(-1) # 20 items
+        data[i, 40:44] = torch.Tensor(state).view(-1)     # 4 items
 
-        # Extract state, bl and bu_sol
-        sols  = dataset.sols[i]
-        state = copy.deepcopy(sols[0])
-        bl_sol, bu_sol = sols[1], sols[2]
+        labels[i, :1000] = torch.Tensor(bl_sol).view(-1)  # 1000 items
+        labels[i, 1000:] = torch.Tensor(bu_sol).view(-1)  # 1000 items
 
-
-        if NORMAL:
-            state[0] /= 20 # 20 = range[0.0, 20.0]
-            state[1] /= 5  # 5 = range[-5.0, 5.0]
-        data[i, 40:44]   = torch.Tensor(state ).view(-1) # 4 items
-        
-        # Extract bl_sol & bu_sol also         .view(-1): arr into 1D
-        labels[i, :1000] = torch.Tensor(bl_sol).view(-1) # 1000 items
-        labels[i, 1000:] = torch.Tensor(bu_sol).view(-1) # 1000 items
-
-    print(f"\nDEBUG: model_training() started.\n{TYPE} = TYPE, {hidden} = hidden, {batch} = batch")
+    print(f"\nDEBUG: model_training() started. PATH =\n{PATH}")
 
     train_size = int(BOUND * len(data))
     valid_size = len(data) - train_size
@@ -137,127 +137,135 @@ def model_training(dataset, model=None, hidden=Hidden, batch=Batch):
     td = TensorDataset(data, labels)
     train_data, valid_data = random_split(td, [train_size, valid_size])
 
-    # Create data loaders
+
+
     train_load = DataLoader(train_data, batch_size=batch, shuffle=True)
     valid_load = DataLoader(valid_data, batch_size=batch, shuffle=False)
 
-    # Model, loss, optimizer, scheduler:
     if not model:
-        model = BinaryNN(hidden)
+        model = BinaryNN(layers, hidden, drops, activ)
 
-    loss_func = nn.BCELoss() # binary cross entropy loss func
-    if LOGITS:
-        loss_func = nn.BCEWithLogitsLoss() # BCE with sigmoid
+    nnBCELoss = nn.BCELoss() # Binary cross entropy loss
+    logitLoss = nn.BCEWithLogitsLoss() # BCE and sigmoid
 
-    optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
-    scheduler = ReduceLR(optimizer)
-    best_loss = float('inf') # track the best validation loss
+    optimizer = optiv(model.parameters(), lr=LEARN_RATE)
 
+    scheduler = ReduceLROnPlateau(optimizer) # Update LR
+    best_loss = float('inf') # Keep best validation loss
 
-    # Start training loop
+    writer = SummaryWriter(f"runs/{DIR}")
+    writer.add_text(DIR, f"{layers} = layers, {hidden} = hidden, {batch} = batch")
+
     for i in range(NUM_ITERS):
         model.train()
         train_loss = 0.0
 
-        for inputs, targets in train_load:
+        for inputs, target in train_load:
             optimizer.zero_grad()
-            outputs = model(inputs)
+            output = model(inputs)
+            loss = logitLoss(output, target)
 
-            loss = loss_func(outputs, targets)
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
         
-        # Start validation loop
+
         model.eval()
         valid_loss = 0.0
         with torch.no_grad():
 
             for inputs, target in valid_load:
-                output = model(inputs)
+                output = torch.sigmoid(model(inputs))
 
-                if LOGITS: # needs sigmoid fn also
-                    output = torch.sigmoid(output)
-
-                loss = loss_func(output, target)
+                loss = nnBCELoss(output, target)
                 valid_loss += loss.item()
 
-        scheduler.step(valid_loss) # update scheduler and LR
+        scheduler.step(valid_loss)
         
-        if valid_loss < best_loss: # saves least lossy model
+        if valid_loss < best_loss:
             best_loss = valid_loss
             torch.save(model.state_dict(), PATH)
+
+        lr = optimizer.param_groups[0]['lr']
+        tl = train_loss / len(train_load)
+        vl = valid_loss / len(valid_load)
+
+        writer.add_scalar('learn_rate', lr, i)
+        writer.add_scalar('train_loss', tl, i)
+        writer.add_scalar('valid_loss', vl, i)
         
         print(f"\niter = {i + 1}/{NUM_ITERS}")
-        print(f"LR   = {optimizer.param_groups[0]['lr']}")
-        print(f"train_loss = {round(train_loss / len(train_load), 4)}")
-        print(f"valid_loss = {round(valid_loss / len(valid_load), 4)}")
+        print(f"learn_rate = {round(lr, 4)}")
+        print(f"train_loss = {round(tl, 4)}")
+        print(f"valid_loss = {round(vl, 4)}")
 
+    writer.close()
     print("\nmodel_training() finished.")
 
 
-def load_neural_net(dataset, index):
-    TYPE  = get_model_type()
+def load_neural_net(dataset):
     BOUND = 0.5
-
-    sols  = dataset.sols[index] # sample solution of relaxed_problem
-    _, _, lower_arr, size_arr = dataset.info
-
-    start_t = torch.Tensor(sols[0]  ).view(-1) # idx 0 = start state
-    lower_t = torch.Tensor(lower_arr).view(-1)
-    size_t  = torch.Tensor(size_arr ).view(-1)
-
-    input_t = torch.cat((start_t, lower_t, size_t))
 
     nn_mod, nn_pth = "", ""
     nn_hid, nn_bat = 0 , 0
     bl_sol, bu_sol = [], []
     diff_min = float("inf")
 
-    # Compare all model outputs in order
-    folder = sorted(os.listdir(f"models/{TYPE}"))
-    folder = [x for x in folder if len(x) > 10] # avoids .DS_Store
+    folder = sorted(os.listdir(f"models/{DIR}")) # Same path/types only
+    folder = [x for x in folder if len(x) > 10]  # Except for .DS_Store
 
     for path in folder:
-        split = path.split("=") # split path using "="
-        hidden= int(split[0])   # hidden layer (1st #)
+        diff_l, diff_u = 0.0, 0.0                # Running sum of diffs
 
-        split = split[1].split("_") # extract 2nd term
-        batch = int(split[1])   # batch size (2nd num)
+        digits = re.findall(r"(\d+)=", path)     # finds digits followed by "="
+        layers, hidden, batch = map(int, digits)
 
-        model = BinaryNN(hidden)
-        load  = torch.load(f"models/{TYPE}/{path}")
-        model.load_state_dict(load)
+        for _ in range(NUM_ITERS):
+            index = random.randint(0, dataset.size - 1)
+
+            # Sample solution from random index^
+            sols = dataset.sols[index]
+            state, bl_sol, bu_sol = sols[0], sols[1], sols[2]
+            _, _, lower_arr, size_arr = dataset.info
+
+            start_t = torch.Tensor(state).view(-1)
+            lower_t = torch.Tensor(lower_arr).view(-1)
+            size_t  = torch.Tensor(size_arr ).view(-1)
+
+            input_t = torch.cat((start_t, lower_t, size_t))
+            input_t = input_t.unsqueeze(0) # Add batch dim->input
 
 
-        model.eval()
-        with torch.no_grad():
-            output = model(input_t)
+            model = BinaryNN(layers, hidden)
+            load  = torch.load(f"models/{DIR}/{path}")
+            model.load_state_dict(load)
 
-            if LOGITS: # needs sigmoid fn also
-                output = torch.sigmoid(output)
+            model.eval()
+            with torch.no_grad():
+                output = torch.sigmoid(model(input_t))
+            
+            output = output.view(-1)           # Remove the batch dim
+            output = (output >= BOUND).float() # Rounds (<0.5) to 0, (>= 0.5) to 1
 
-        output = (output > BOUND).float() # round (<0.5) to 0.0, (>0.5) to 1.0
+            bl_out = output[:1000].view(10, 2, 50).tolist() # Reshape to multi-dim
+            bu_out = output[1000:].view(10, 2, 50).tolist() # Then convert to list
 
-        bl_out = output[:1000].view(10, 2, 50).tolist() # reshape to multi-dim
-        bu_out = output[1000:].view(10, 2, 50).tolist() # and converts to list
+            diff_l += np.sum(np.array(bl_out) != np.array(sols[1])) # Compares differences
+            diff_u += np.sum(np.array(bu_out) != np.array(sols[2])) # in NN and data b_sol
 
-        diff_l = np.sum(np.array(bl_out) != np.array(sols[1])) # compares differences
-        diff_u = np.sum(np.array(bu_out) != np.array(sols[2])) # in NN and data b_sol
-        diff_avg = (diff_l + diff_u) / 2
+        diff_avg = (diff_l + diff_u) / (2 * NUM_ITERS)
 
         if diff_avg < diff_min:
             nn_mod, nn_pth, nn_hid, nn_bat, bl_sol, bu_sol, diff_min = (
             model , path  , hidden, batch , bl_out, bu_out, diff_avg)
-            
-        print(f"\nDEBUG: differences in '{TYPE}/{path}':\nbl_sol = {diff_l}, bu_sol = {diff_u}, diff_avg = {diff_avg}")
-    
-    print(f"\nDEBUG: best model = '{TYPE}/{nn_pth}'")
+        
+        print(f"\nDEBUG: differences in '{DIR}/{path}':\nbl_sol = {diff_l / NUM_ITERS}, bu_sol = {diff_u / NUM_ITERS}, diff_avg = {diff_avg}")
 
+    print(f"\nDEBUG: best model = '{nn_pth}'")
     return nn_mod, nn_hid, nn_bat, bl_sol, bu_sol
 
 
-def relaxed_problem(dataset, retrain=False):
+def relaxed_problem(dataset, retrain):
     # A MODIFIED motion planning problem
 
     index = random.randint(0, dataset.size - 1) # random sample solution
@@ -289,8 +297,8 @@ def relaxed_problem(dataset, retrain=False):
 
 
         if retrain:
-            model_training(dataset, model=nn_mod, hidden=nn_hid, batch=nn_bat)
-            return
+            model_training(dataset, nn_hid, nn_bat, model=nn_mod)
+            exit()
 
         for i in range(world.MAX):
             bool_low[i].value = np.array(bl_sol[i])
@@ -324,16 +332,25 @@ def relaxed_problem(dataset, retrain=False):
         # 1st value in arr(    x_accel    ,    y_accel     )
         world.plot_problem(state_sol, start, goal)
 
+"""
+Best models from training (best 3 out of 5):
+- basic_norm:
+    - 10 layers, 128 hidden, 1024 batch
+- focus_norm:
+    - 10 layers, 96 hidden, 1024 OR 2048 batch
+- new_models:
+
+"""
 
 if __name__ == "__main__":
     dataset = Dataset()
     TRAIN   = True
-    RETRAIN = True
 
     if TRAIN:
-        model_training(dataset, hidden=128, batch=128)
-        model_training(dataset, hidden=128, batch=1024)
-        model_training(dataset, hidden=1024, batch=128)
-        model_training(dataset, hidden=1024, batch=1024)
+        for batch in [1024, 2048]:
+            for drops in [False, True]:
+                for activ in [fn.leaky_relu, fn.gelu]:
+                    for optiv in [optim.SGD, optim.RMSprop]:
+                        model_training(dataset, batch, drops, activ, optiv)
     else:
-        relaxed_problem(dataset, RETRAIN)
+        load_neural_net(dataset)
