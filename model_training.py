@@ -18,7 +18,7 @@ INPUTS = 44
 OUTPUT = 2000
 NUM_ITERS  = 100
 LEARN_RATE = 0.001
-DIR = "new_models"
+DIR = "_"
 
 class Dataset:
     """
@@ -100,7 +100,20 @@ class BinaryNN(nn.Module):
                 x = self.dropout(x)
 
             x = self.activ(layer(x))
-        return self.output(x)
+        return torch.sigmoid(self.output(x))
+    
+    # def forward(self, x):
+    #     x = self.normal(self.input(x))
+    #     x = self.activ(x)
+
+    #     for layer in self.modlst:
+    #         if self.drops:
+    #             x = self.dropout(x)
+    #         x = self.activ(layer(x))
+
+    #     x = self.output(x)
+    #     x = torch.sign(x) + 1.0
+    #     return x / 2.0
     
 
 def model_training(dataset, drops, activ, optiv, layers=10, hidden=100, batch=1024, model=None):
@@ -365,19 +378,19 @@ Best models from training (best 3 out of 5)
 - basic_norm:
     - 10 layers, 128 hidden, 1024 batch
 - focus_norm:
-    - 10 layers, 96 hidden, 1024 OR 2048 batch
+    - 10 layers, 100 hidden, 1024/2048 batch
 - new_models:
     - SGD is terrible, average difference: 500
 """
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN   = False
+    TRAIN   = True
 
     if TRAIN:
-        for drops in [False, True]:
-            for activ in [fn.leaky_relu, fn.gelu]:
-                for optiv in [optim.Adam, optim.RMSprop]:
+        for drops in [True]:
+            for activ in [fn.leaky_relu]:
+                for optiv in [optim.Adam]:
                     model_training(dataset, drops, activ, optiv)
     else:
         load_neural_net(dataset)
