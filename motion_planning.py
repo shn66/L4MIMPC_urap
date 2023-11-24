@@ -87,6 +87,7 @@ class World:
         self.global_obs = global_obs
         self.MAX = len(global_obs)
 
+
     def random_state(self, iters, bound):
         lower, upper = self.limit # unpack array -> 2 vars
 
@@ -103,6 +104,7 @@ class World:
             for i in range(len(self.global_obs)): # loop through every obs
                 if (x >= lower_x[i] and x <= upper_x[i] and
                     y >= lower_y[i] and y <= upper_y[i]):
+                    
                     in_obs = True                 # if inside walls of obs
                     break                         # break to get new state
             if not in_obs:                        # else return this state
@@ -116,17 +118,17 @@ class World:
         size_arr  = self.global_obs.size_arr
 
         plt.gca().add_patch(Rectangle((0, -5), 20, 10, linewidth=5.0, 
-                            ec='g', fc='w', alpha=0.2, label="boundary"))
+                            ec="g", fc="w", alpha=0.2, label="boundary"))
     
-        plt.plot(state_sol[0, :], state_sol[1, :], 'o', label="trajectory")
+        plt.plot(state_sol[0, :], state_sol[1, :], "o", label="trajectory")
         plt.plot(start[0], start[1], "*", linewidth=10, label="start")
-        plt.plot(goal[0], goal[1], '*', linewidth=10, label="goal")
+        plt.plot(goal[0],  goal[1],  "*", linewidth=10, label="goal")
 
         for i in range(len(self.global_obs)):
             label = "obstacle" if i == 0 else ""
 
             plt.gca().add_patch(Rectangle((lower_arr[0][i], lower_arr[1][i]),
-                size_arr[0][i], size_arr[1][i], ec='r', fc='r', label=label))
+                size_arr[0][i], size_arr[1][i], ec="r", fc="r", label=label))
         
         plt.legend(loc = 4)
         plt.show()
@@ -180,8 +182,6 @@ class Robot:
             if (in_FOV(lower) or in_FOV(upper)): # FOV fully capture obstacle
                 self.local_obs.insert((lower, size), (lower_y[i], size_y[i]))
                 # add unchanged vals ((  x_items  ), (       y_items       ))
-        return
-        print(f"\nDEBUG: detect_obs() done. local_obs:\n{self.local_obs}")
     
 
     def update_state(self, acc_x, acc_y):
@@ -312,10 +312,10 @@ def motion_planning(world, robot, relaxed):
 
         ## SEE SCREENSHOT 2 ##
         # calculating cumulative cost
-        objective += cp.norm(Q @ (state[:, k] - goal0), 'inf') + cp.norm(R @ input[:, k], 'inf') 
+        objective += cp.norm(Q @ (state[:, k] - goal0), "inf") + cp.norm(R @ input[:, k], "inf") 
     
     # adding extreme penalty on terminal state to encourage getting close to the goal
-    objective += 100 * cp.norm(Q @ (state[:, -1] - goal0), 'inf')
+    objective += 100 * cp.norm(Q @ (state[:, -1] - goal0), "inf")
 
     # Define the motion planning problem
     problem = cp.Problem(cp.Minimize(objective), constraints)
