@@ -19,7 +19,7 @@ NUM_ITERS  = 100
 LEARN_RATE = 0.001
 
 DIR = "focus_norm" # Works on anything except new_models
-SPLIT  = (DIR == "split_train")
+SPLIT  = DIR == "split_training"
 OUTPUT = 1000 if SPLIT else 2000
 
 class Dataset:
@@ -144,8 +144,11 @@ def model_training(dataset, is_low, layers=10, hidden=100, batch=1024, model=Non
     if not model:
         model = BinaryNN(layers, hidden)
 
-    nnBCELoss = nn.BCELoss() # Binary cross entropy loss
-    logitLoss = nn.BCEWithLogitsLoss() # BCE and sigmoid
+    pos = labels.sum(dim=0)  # Create positive weights for labels
+    pos_weigh = (labels.size(0) - pos) / pos
+
+    nnBCELoss = nn.BCELoss() # Binary cross entropy (and sigmoid)
+    logitLoss = nn.BCEWithLogitsLoss(pos_weight=pos_weigh)
 
     optimizer = optim.Adam(model.parameters(), lr=LEARN_RATE)
 

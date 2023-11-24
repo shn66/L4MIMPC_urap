@@ -146,8 +146,11 @@ def model_training(dataset, drops, activ, optiv, layers=10, hidden=100, batch=10
     if not model:
         model = BinaryNN(layers, hidden, drops, activ)
 
-    nnBCELoss = nn.BCELoss() # Binary cross entropy loss
-    logitLoss = nn.BCEWithLogitsLoss() # BCE and sigmoid
+    pos = labels.sum(dim=0)  # Create positive weights for labels
+    pos_weigh = (labels.size(0) - pos) / pos
+
+    nnBCELoss = nn.BCELoss() # Binary cross entropy (and sigmoid)
+    logitLoss = nn.BCEWithLogitsLoss(pos_weight=pos_weigh)
 
     optimizer = optiv(model.parameters(), lr=LEARN_RATE)
 
