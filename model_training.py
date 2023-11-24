@@ -18,7 +18,7 @@ INPUTS = 44
 OUTPUT = 2000
 NUM_ITERS  = 100
 LEARN_RATE = 0.001
-DIR = "new_models" # This file only works on new_models
+DIR = "pos_weigh_mt" # This file only works on new_models
 
 class Dataset:
     """
@@ -382,7 +382,7 @@ def relaxed_problem(dataset):
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN   = False
+    TRAIN   = True
 
     if TRAIN:
         for drops in [True]:
