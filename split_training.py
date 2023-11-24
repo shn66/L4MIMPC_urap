@@ -18,7 +18,7 @@ INPUTS = 44
 NUM_ITERS  = 100
 LEARN_RATE = 0.001
 
-DIR = "focus_norm" # Works on anything except new_models
+DIR = "pos_weigh_st" # Works on anything except new_models
 SPLIT  = DIR == "split_training"
 OUTPUT = 1000 if SPLIT else 2000
 
@@ -374,10 +374,10 @@ def relaxed_problem(dataset):
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN   = False
+    TRAIN   = True
 
     if TRAIN:
-        for is_low in [False, True]:
+        for is_low in [False]:
             model_training(dataset, is_low)
     else:
         test_neural_net(dataset, verbose=True, retrain=False)
