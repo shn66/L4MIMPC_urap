@@ -7,7 +7,7 @@ import cvxpy as cp
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-class Obstacle_Map:
+class ObsMap:
     """
     lower_arr = [[0.0, 2.0, 2.0, 5.0, 7.0],   # x coords
                  [1.0,-5.0, 3.0,-2.0,-5.0]]   # y coords
@@ -22,7 +22,7 @@ class Obstacle_Map:
         case = 0 # checks both arrays have x, y
         if not (len(lower_arr) == len(size_arr) == 2):
             case = 1
-        else:    # checks all arrays are equal len
+        else:    # check all len(arr) are equal
             for arr in lower_arr + size_arr:
                 if len(arr) != len(lower_arr[0]):
                     case = 2
@@ -55,7 +55,7 @@ class Obstacle_Map:
             self.size_arr[1].append(size_y)
 
     
-    def unwrap(self): # return (x_l, x_s, y_l, y_s)
+    def unwrap(self): # return (x,y)->(lower, size)
         lower = self.lower_arr
         size = self.size_arr
         return lower[0], size[0], lower[1], size[1]
@@ -67,11 +67,16 @@ class Obstacle_Map:
         return len(self.size_arr[0])
 
 
-class Environment:
+class World:
     """
     limit = [[0.0, -4.9,-1.0,-1.0], # lower[pos_x, pos_y,
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
+<<<<<<< HEAD
+=======
+
+>>>>>>> josh-branch
     goal = [x_pos, y_pos, x_vel, y_vel]
+    solutions = [[state, bl_sol, bu_sol], ...]
 
     global_obs = Obstacle_Map()
     MAX = integer, max # of obs
@@ -80,11 +85,18 @@ class Environment:
         self.limit = limit
         self.goal  = goal
         self.TOL   = TOL
+<<<<<<< HEAD
         self.global_obs = global_obs
         self.MAX   = len(global_obs)
 
         self.solutions = [] # [[state, bl_sol, bu_sol], ...]
         self.trajects  = [] # [[state_traj, input_traj] ...]
+=======
+
+        self.solutions  = []
+        self.global_obs = global_obs
+        self.MAX = len(global_obs)
+>>>>>>> josh-branch
 
 
     def random_state(self, iters, bound):
@@ -103,6 +115,7 @@ class Environment:
             for i in range(len(self.global_obs)): # loop through every obs
                 if (x >= lower_x[i] and x <= upper_x[i] and
                     y >= lower_y[i] and y <= upper_y[i]):
+                    
                     in_obs = True                 # if inside walls of obs
                     break                         # break to get new state
             if not in_obs:                        # else return this state
@@ -111,27 +124,43 @@ class Environment:
         print("\nERROR: random_state() couldn't find valid state"); exit()
 
 
+<<<<<<< HEAD
     def plot_problem(self, x_sol, start, goal):
         obs_lower = self.global_obs.lower_arr
         obs_size = self.global_obs.size_arr
+=======
+    def plot_problem(self, state_sol, start, goal):
+        lower_arr = self.global_obs.lower_arr
+        size_arr  = self.global_obs.size_arr
+>>>>>>> josh-branch
 
         plt.gca().add_patch(Rectangle((0, -5), 20, 10, linewidth=5.0, 
-                            ec='g', fc='w', alpha=0.2, label="boundary"))
+                            ec="g", fc="w", alpha=0.2, label="boundary"))
     
-        plt.plot(x_sol[0, :], x_sol[1, :], 'o', label="trajectory")
+        plt.plot(state_sol[0, :], state_sol[1, :], "o", label="trajectory")
         plt.plot(start[0], start[1], "*", linewidth=10, label="start")
+<<<<<<< HEAD
         plt.plot(goal[0], goal[1], '*', linewidth=10, label="goal")
+=======
+        plt.plot(goal[0],  goal[1],  "*", linewidth=10, label="goal")
+>>>>>>> josh-branch
 
         for i in range(len(self.global_obs)):
             label = "obstacle" if i == 0 else ""
 
+<<<<<<< HEAD
             plt.gca().add_patch(Rectangle((obs_lower[0][i], obs_lower[1][i]),
                 obs_size[0][i], obs_size[1][i], ec='r', fc='r', label=label))
+=======
+            plt.gca().add_patch(Rectangle((lower_arr[0][i], lower_arr[1][i]),
+                size_arr[0][i], size_arr[1][i], ec="r", fc="r", label=label))
+>>>>>>> josh-branch
         
         plt.legend(loc = 4)
         plt.show()
 
 
+<<<<<<< HEAD
     def export_files(self):
         obs = self.global_obs
         data = [self.limit, self.goal, obs.lower_arr, obs.size_arr]
@@ -147,6 +176,20 @@ class Environment:
 
         self.solutions = []
         self.trajects  = []
+=======
+    def export_files(self, iter):
+        if not os.path.exists("data"):
+            os.mkdir("data")
+
+        if not os.path.exists("data/info.pkl"):
+            obs = self.global_obs
+            file = open("data/info.pkl", "wb")
+            pickle.dump([self.limit, self.goal, obs.lower_arr, obs.size_arr], file)
+
+        file = open(f"data/solutions{iter}.pkl", "wb")
+        pickle.dump(self.solutions, file)
+        self.solutions = []
+>>>>>>> josh-branch
 
 
 class Robot:
@@ -163,28 +206,38 @@ class Robot:
         self.FOV   = FOV
 
         self.global_obs = global_obs
+<<<<<<< HEAD
         self.local_obs  = Obstacle_Map([[], []], [[], []])
+=======
+        self.local_obs  = ObsMap([[], []], [[], []])
+>>>>>>> josh-branch
 
         self.state_traj = [[], [], [], []]    # track vars by updating arr
         self.input_traj = [[], []]
 
 
     def detect_obs(self):
-        x = self.state[0]                     # state = [x_pos, y_pos,...]
+        x_pos = self.state[0]                 # state = [x_pos, y_pos,...]
         lower_x, size_x, lower_y, size_y = self.global_obs.unwrap()
 
         for i in range(len(self.global_obs)): # loop through each obstacle
-            obs_lower = lower_x[i]            # obs's lower corner x value
-            obs_size = size_x[i]              # obs's width in x direction
+            lower = lower_x[i]                # obs's lower corner x value
+            size = size_x[i]                  # obs's width in x direction
             
-            obs_upper = obs_lower + obs_size              # obs's upper corner x value
-            in_FOV = lambda obs: obs >= x and obs <= x + self.FOV  # is obs_corner in robot.FOV
+            upper = lower + size              # is obs's corner within FOV
+            in_FOV = lambda obs: obs >= x_pos and obs <= x_pos + self.FOV
 
+<<<<<<< HEAD
             if (in_FOV(obs_lower) or in_FOV(obs_upper)): # FOV fully capture obstacle
                 self.local_obs.insert((obs_lower, obs_size), (lower_y[i], size_y[i]))
                 # add unchanged vals ((      x_items      ), (       y_items       ))
         return
         print(f"\nDEBUG: detect_obs() done. local_obs:\n{self.local_obs}")
+=======
+            if (in_FOV(lower) or in_FOV(upper)): # FOV fully capture obstacle
+                self.local_obs.insert((lower, size), (lower_y[i], size_y[i]))
+                # add unchanged vals ((  x_items  ), (       y_items       ))
+>>>>>>> josh-branch
     
 
     def update_state(self, acc_x, acc_y):
@@ -257,6 +310,7 @@ def motion_planning(world, robot, relaxed):
     obs_upper = cp.Parameter((2, world.MAX)) # cols = world.MAX of all obs
 
 ## State constraints
+<<<<<<< HEAD
     x = state0[0]
     limit_l = world.limit[0] # lower arr[pos_x, pos_y,
     limit_u = world.limit[1] # upper arr vel_x, vel_y]
@@ -264,6 +318,15 @@ def motion_planning(world, robot, relaxed):
     lower_x = cp.vstack([x - world.TOL] + limit_l[1:]) # arr[pos-TOL, -5, -1, -1]
     upp_fov = cp.minimum(x + robot.FOV, limit_u[0])    # min(pos+FOV, limit_u[0])
     upper_x = cp.vstack([upp_fov] + limit_u[1:])       # arr[upp_fov, 5, 1, 1]
+=======
+    x_pos   = state0[0]
+    limit_l = world.limit[0] # lower arr[pos_x, pos_y,
+    limit_u = world.limit[1] # upper arr vel_x, vel_y]
+
+    lower_x = cp.vstack([x_pos - world.TOL] + limit_l[1:]) # arr[pos-TOL, -5, -1, -1]
+    upp_fov = cp.minimum(x_pos + robot.FOV, limit_u[0])    # min(pos+FOV, limit_u[0])
+    upper_x = cp.vstack([upp_fov] + limit_u[1:])           # arr[upp_fov, 5, 1, 1]
+>>>>>>> josh-branch
 
     lower_x = lower_x[:, 0]      # resize arr shape from
     upper_x = upper_x[:, 0]      # (4, 1) to (4) idk why
@@ -315,10 +378,17 @@ def motion_planning(world, robot, relaxed):
 
         ## SEE SCREENSHOT 2 ##
         # calculating cumulative cost
+<<<<<<< HEAD
         objective += cp.norm(Q @ (state[:, k] - goal0), 'inf') + cp.norm(R @ input[:, k], 'inf') 
     
     # adding extreme penalty on terminal state to encourage getting close to the goal
     objective += 100 * cp.norm(Q @ (state[:, -1] - goal0), 'inf')
+=======
+        objective += cp.norm(Q @ (state[:, k] - goal0), "inf") + cp.norm(R @ input[:, k], "inf") 
+    
+    # adding extreme penalty on terminal state to encourage getting close to the goal
+    objective += 100 * cp.norm(Q @ (state[:, -1] - goal0), "inf")
+>>>>>>> josh-branch
 
     # Define the motion planning problem
     problem = cp.Problem(cp.Minimize(objective), constraints)
@@ -331,7 +401,11 @@ def motion_planning(world, robot, relaxed):
         return problem, (state, input, bool_low, bool_upp), (state0, goal0, obs_lower, obs_upper)
 
 
+<<<<<<< HEAD
 def run_simulations(num_iters, plot_period, plot_steps):
+=======
+def run_simulations(num_iters, write_per, plot_prob):
+>>>>>>> josh-branch
     # Create the motion planning problem
 
     lower_arr = [[0.0, 2.0, 2.0, 5.0, 7.5, 10.0, 12.0, 12.0, 15.0, 17.5], # x coords
@@ -344,6 +418,7 @@ def run_simulations(num_iters, plot_period, plot_steps):
     limit = [[0.0, -4.9,-1.0,-1.0], # lower[pos_x, pos_y,
              [20.0, 4.9, 1.0, 1.0]] # upper vel_x, vel_y]
     
+<<<<<<< HEAD
     global_obs = Obstacle_Map(lower_arr, size_arr)
     world = Environment(limit, goal, global_obs, TOL = 0.1)
 
@@ -352,44 +427,76 @@ def run_simulations(num_iters, plot_period, plot_steps):
 
         start = world.random_state(iters=100, bound=0.5)
         print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
+=======
+    global_obs = ObsMap(lower_arr, size_arr)
+    world = World(limit, goal, global_obs, TOL=0.1)
 
+    if not os.path.exists("data"):
+        os.mkdir("data")
+    data = [x for x in os.listdir("data") if x.startswith("sol")]
+
+    # Randomize start, get vars & params
+    for iter in range(len(data), num_iters):
+>>>>>>> josh-branch
+
+        start = world.random_state(iters=100, bound=0.9)
         robot = Robot(start, global_obs, TIME=0.2, FOV=10.0)
+<<<<<<< HEAD
         problem, vars, params = motion_planning(world, robot, relaxed=False)
 
         state, input, bool_low, bool_upp = vars
         state0, goal0, obs_lower, obs_upper = params
 
         dist = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
+=======
+
+        print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
+
+        problem, vars, params = motion_planning(world, robot, relaxed=False)
+>>>>>>> josh-branch
 
   
         # Initialize all CP.parameter values
         while dist(goal) > world.TOL:
 
+<<<<<<< HEAD
+=======
+        state, input, bool_low, bool_upp = vars
+        state0, goal0, obs_lower, obs_upper = params
+
+        dist = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
+  
+        # Initialize all CP.parameter values
+        while dist(goal) > world.TOL:
+
+>>>>>>> josh-branch
             print(f"DEBUG: abs(distance) to goal: {round(dist(goal), 2)}")
 
             state0.value = np.array(robot.state)
             goal0.value = np.array(goal)
 
             robot.detect_obs()
-            l = copy.deepcopy(robot.local_obs.lower_arr)
-            s = copy.deepcopy(robot.local_obs.size_arr)
+            lower = copy.deepcopy(robot.local_obs.lower_arr)
+            size = copy.deepcopy(robot.local_obs.size_arr)
 
-            while (len(l[0]) < world.MAX):
+            while (len(lower[0]) < world.MAX):
                 for i in range(2):
-                    l[i].append(-2.0) # [len(L) to world.MAX] are fake obs
-                    s[i].append(0.0)  # fake obs have lower x,y: -2.0,-2.0
+                    lower[i].append(-2.0) # [len(L) to world.MAX] are fake obs
+                    size[i].append(0.0)   # fake obs have lower x,y: -2.0,-2.0
 
-            obs_lower.value = np.array(l)
-            obs_upper.value = np.array(l) + np.array(s)
+            obs_lower.value = np.array(lower)
+            obs_upper.value = np.array(lower) + np.array(size)
 
             # Now collect optimized trajectories
             print(f"\nSolving iter = {iter}")
             problem.solve(verbose = False)
 
+
             print(f"Status = {problem.status}")
             print(f"Optimal cost = {round(problem.value, 2)}")
             print(f"Solve time = {round(problem.solver_stats.solve_time, 2)} secs.")
 
+<<<<<<< HEAD
             x_sol = state.value
             u_sol = input.value
             bl_sol, bu_sol = [], []
@@ -418,3 +525,30 @@ def run_simulations(num_iters, plot_period, plot_steps):
 
 if __name__ == "__main__": # Set True to see every plot_period steps
     run_simulations(num_iters=1, plot_period=10, plot_steps=False)
+=======
+            state_sol = state.value
+            input_sol = input.value
+            bl_sol, bu_sol = [], []
+
+            for i in range(world.MAX): # converts np.arrays to py.lists
+                bl_sol.append(np.around(bool_low[i].value, 1).tolist())
+                bu_sol.append(np.around(bool_upp[i].value, 1).tolist())
+
+            if (len(robot.state_traj[0]) - 1) % write_per == 0:
+
+                # write soln to solutions array every write_per steps
+                world.solutions.append([robot.state, bl_sol, bu_sol])
+
+                if plot_prob:
+                    world.plot_problem(state_sol, start, goal)
+            
+            robot.update_state(input_sol[0][0], input_sol[1][0])
+            # 1st value in arr(    x_accel    ,    y_accel     )
+
+        if plot_prob:
+            world.plot_problem(np.array(robot.state_traj), start, goal)
+        world.export_files(iter)
+
+if __name__ == "__main__": # record soln every write_per steps
+    run_simulations(num_iters=1000, write_per=1, plot_prob=False)
+>>>>>>> josh-branch
