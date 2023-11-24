@@ -18,7 +18,7 @@ INPUTS = 44
 NUM_ITERS  = 100
 LEARN_RATE = 0.001
 
-DIR = "split_train" # Works on anything except new_models
+DIR = "focus_norm" # Works on anything except new_models
 SPLIT  = (DIR == "split_train")
 OUTPUT = 1000 if SPLIT else 2000
 
