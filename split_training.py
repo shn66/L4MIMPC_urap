@@ -374,7 +374,7 @@ def relaxed_problem(dataset):
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN   = True
+    TRAIN   = False
 
     if TRAIN:
         for is_low in [False]:
