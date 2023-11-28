@@ -94,7 +94,10 @@ class BinaryNN(nn.Module):
 
         for layer in self.modlst:
             x = torch.relu(layer(x))
-        return self.output(x)
+        x = self.output(x)
+
+        return torch.relu(x)
+
 
 
 def model_training(dataset, is_low, layers=10, hidden=100, batch=1024, model=None):
@@ -259,6 +262,7 @@ def test_neural_net(dataset, verbose, retrain):
             lx, ly = lower_arr[0][i], lower_arr[1][i]
             sx, sy =  size_arr[0][i],  size_arr[1][i]
             print(f"obs @({lx}, {ly}), size ({sx}, {sy}): \ndiff_l = \n{diff_l[i]} \ndiff_u = \n{diff_u[i]}")
+            print(f"\nbl_sol[i] = \n{bl_sol[i]} \nbu_sol[i] = \n{bu_sol[i]}")
 
     nn_model, nn_path = None, None
     diff_min = float("inf")
@@ -374,7 +378,7 @@ def relaxed_problem(dataset):
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN   = False
+    TRAIN   = True
 
     if TRAIN:
         for is_low in [False]:
