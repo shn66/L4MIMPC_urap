@@ -206,7 +206,7 @@ def motion_planning(world, robot, relaxed):
     """
     Inputs:
     obs_size:   2 x num_obs array, describing width and height of the obstacles, num_obs = # of obstacles
-    obs_lower:  2 x num_obs array, describing lower (south-western) corners of obstacles
+    lower_obs:  2 x num_obs array, describing lower (south-western) corners of obstacles
 
     Outputs:
     problem:    motion planning problem that can take a starting position and goal position as parameters
@@ -248,8 +248,8 @@ def motion_planning(world, robot, relaxed):
     state0 = cp.Parameter(dim_state) # state0, goal have
     goal0  = cp.Parameter(dim_state) # arrays of len = 4
 
-    obs_lower = cp.Parameter((2, world.MAX)) # rows = 2 for x and y array
-    obs_upper = cp.Parameter((2, world.MAX)) # cols = world.MAX of all obs
+    lower_obs = cp.Parameter((2, world.MAX)) # rows = 2 for x, y arrays
+    upper_obs = cp.Parameter((2, world.MAX)) # cols = world.MAX all obs
 
 ## State constraints
     x_pos   = state0[0]
@@ -298,8 +298,8 @@ def motion_planning(world, robot, relaxed):
 
 
             constraints += [
-                state[0:2, k + 1] <= obs_lower[:, i] + M @ bool_low[i][:, k],
-                state[0:2, k + 1] >= obs_upper[:, i] - M @ bool_upp[i][:, k]]
+                state[0:2, k + 1] <= lower_obs[:, i] + M @ bool_low[i][:, k],
+                state[0:2, k + 1] >= upper_obs[:, i] - M @ bool_upp[i][:, k]]
             
             # IF YOU SATISFY ALL 4 OF OBS'S CONSTRAINTS, YOURE IN THE OBS.
             constraints += [
@@ -318,9 +318,9 @@ def motion_planning(world, robot, relaxed):
     print(f"\nDEBUG: motion_planning() done. return problem, vars, params")
 
     if relaxed:
-        return problem, (state, input), (bool_low, bool_upp, state0, goal0, obs_lower, obs_upper)
+        return problem, (state, input), (bool_low, bool_upp, state0, goal0, lower_obs, upper_obs)
     else:
-        return problem, (state, input, bool_low, bool_upp), (state0, goal0, obs_lower, obs_upper)
+        return problem, (state, input, bool_low, bool_upp), (state0, goal0, lower_obs, upper_obs)
 
 
 def run_simulations(iter_one, iter_end, plot_sol):
@@ -350,7 +350,7 @@ def run_simulations(iter_one, iter_end, plot_sol):
         problem, vars, params = motion_planning(world, robot, relaxed=False)
 
         state , input, bool_low , bool_upp  = vars
-        state0, goal0, obs_lower, obs_upper = params
+        state0, goal0, lower_obs, upper_obs = params
 
         dist = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
   
@@ -364,16 +364,16 @@ def run_simulations(iter_one, iter_end, plot_sol):
             goal0.value  = np.array(goal)
 
             robot.detect_obs()
-            lower = copy.deepcopy(robot.local_obs.lower_arr)
-            size  = copy.deepcopy(robot.local_obs.size_arr)
+            lower_cpy = copy.deepcopy(robot.local_obs.lower_arr)
+            size_cpy  = copy.deepcopy(robot.local_obs.size_arr)
 
-            while (len(lower[0]) < world.MAX):
+            while (len(lower_cpy[0]) < world.MAX):
                 for i in range(2):
-                    lower[i].append(-2.5) # [len(L) to world.MAX] are fake obs
-                    size[i].append(0.0)   # fake obs have lower x,y: -2.0,-2.0
+                    lower_cpy[i].append(-2.5) # [len(L) to world.MAX] are fake obs
+                    size_cpy[i].append(0.0)   # fake obs have lower x,y: -2.0,-2.0
 
-            obs_lower.value = np.array(lower)
-            obs_upper.value = np.array(lower) + np.array(size)
+            lower_obs.value = np.array(lower_cpy)
+            upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
 
             # Now collect optimized trajectories
             print(f"\nSolving iter = {iter}")
@@ -389,15 +389,15 @@ def run_simulations(iter_one, iter_end, plot_sol):
 
 
             if not isinstance(bool_low[0].value, np.ndarray):
-                print("DEBUG: bad solution, skipping iteration"); return 0
+                print("DEBUG: bad solution, skipping iteration")
+                return 0
 
             for i in range(world.MAX): # converts np.arrays to py.lists
                 bl_sol.append(np.around(bool_low[i].value, 1).tolist())
                 bu_sol.append(np.around(bool_upp[i].value, 1).tolist())
 
-            lx, sx, ly, sy = robot.local_obs.unwrap()
-            local_obs = [[lx, ly], [sx, sy]]
-            world.solutions.append([robot.state, local_obs, bl_sol, bu_sol])
+            obs = [lower_cpy, size_cpy]
+            world.solutions.append([robot.state, obs, bl_sol, bu_sol])
 
             if plot_sol:
                 world.plot_problem(state_sol, start, goal)
@@ -416,5 +416,5 @@ if __name__ == "__main__":
     iter_one = 0
     iter_end = 1000
 
-    while iter_one < iter_end: # run_sim output 1=pass; 0=fail
+    while iter_one < iter_end: # run_sim return 1=pass; 0=fail
         iter_one += run_simulations(iter_one, iter_end, False)
