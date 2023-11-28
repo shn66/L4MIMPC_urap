@@ -24,7 +24,6 @@ HIDDEN = 128
 BATCH  = 1024
 DIR = "final"
 
-
 class Dataset:
     # solutions.pkl = [[state, local_obs, bl_sol, bu_sol], ...]
 
@@ -94,11 +93,10 @@ def model_training(dataset, drops, weigh, activ, optiv, model=None):
     data   = torch.zeros((SIZE, INPUTS)) # Inputs = 24  (state, obs_arrs)
     labels = torch.zeros((SIZE, OUTPUT)) # Output = 1000 (bl_sol, bu_sol)
 
-    for i in range(SIZE):
-        sols = dataset.sols[i]           # Sample sol @ index i
-        state, obs_arr, bl_sol, bu_sol = sols
+    for i in range(SIZE):                # Sample sol @ index i
+        state, obs_arr, bl_sol, bu_sol = dataset.sols[i]
 
-        tens = lambda x: torch.Tensor(x).view(-1)
+        tens = lambda x: torch.Tensor(x).view(-1) # flat tensor
 
         data[i, :4] = tens(state)        # 4 items
         data[i, 4:] = tens(obs_arr)      # 20 items
@@ -183,49 +181,43 @@ def model_training(dataset, drops, weigh, activ, optiv, model=None):
 def test_neural_net(dataset, verbose):
 
     def get_model_outs(model):
-        BOUND = 0.5          # Sample solution using random index
-        index = random.randint(0, dataset.size - 1)
+        BOUND = 0.5
 
-        sols  = dataset.sols[index]
-        state, bl_sol, bu_sol = sols
-        _, _, lower_arr, size_arr = dataset.info
+        i = random.randint(0, dataset.size - 1)   # Random soln
+        state, obs_arr, bl_sol, bu_sol = dataset.sols[i]
 
-        start = torch.Tensor(state).view(-1)
-        lower = torch.Tensor(lower_arr).view(-1)
-        size  = torch.Tensor(size_arr ).view(-1)
+        tens = lambda x: torch.Tensor(x).view(-1) # Flat tensor
 
-        input = torch.cat((start, lower, size))
+        input = torch.cat((tens(state), tens(obs_arr)))
         input = input.unsqueeze(0)         # Add batch dim->input
         
         with torch.no_grad():
             output = torch.sigmoid(model(input))
         
         output = output.view(-1)           # Remove the batch dim
-        output = (output >= BOUND).float() # Rounds (< 0.5) to 0, (>= 0.5) to 1
+        output = (output >= BOUND).float() # Round ~0.5 to 0 or 1
 
-        return output, np.array(bl_sol), np.array(bu_sol)
+        return output, obs_arr, np.array(bl_sol), np.array(bu_sol)
 
     # Reshape to multi-dim, convert to np.array
-    nums = lambda x: x.view(10, 2, 50).detach().numpy()
+    nums = lambda x: x.view(5, 2, 50).detach().numpy()
 
     def view_model_diff(model):
-        output, bl_sol, bu_sol = get_model_outs(model)
+        output, obs_arr, bl_sol, bu_sol = get_model_outs(model)
 
-        bl_out = nums(output[:1000])
-        bu_out = nums(output[1000:])
+        bl_out = nums(output[:500])
+        bu_out = nums(output[500:])
 
         diff_l = np.where(bl_sol != bl_out, "X", ".")
         diff_u = np.where(bu_sol != bu_out, "X", ".")
 
-        _, _, lower_arr, size_arr = dataset.info
         print(f"\nDEBUG: differences in output:")
 
-        for i in range(10):
-            lx, ly = lower_arr[0][i], lower_arr[1][i]
-            sx, sy =  size_arr[0][i],  size_arr[1][i]
+        for i in range(5):
+            lx, ly = obs_arr[0][0][i], obs_arr[0][1][i]
+            sx, sy = obs_arr[1][0][i], obs_arr[1][1][i]
 
             print(f"obs @({lx}, {ly}), size ({sx}, {sy}): \ndiff_l = \n{diff_l[i]} \ndiff_u = \n{diff_u[i]}")
-            # print(f"\nbl_sol[i] = \n{bl_sol[i]} \nbu_sol[i] = \n{bu_sol[i]}")
 
     nn_model, nn_path = None, None
     diff_min = float("inf")
@@ -245,7 +237,7 @@ def test_neural_net(dataset, verbose):
         model.eval()
 
         for _ in range(NUM_ITERS):
-            output, bl_sol, bu_sol = get_model_outs(model)
+            output, _, bl_sol, bu_sol = get_model_outs(model)
 
             bl_out = nums(output[:500])
             bu_out = nums(output[500:])
@@ -259,6 +251,7 @@ def test_neural_net(dataset, verbose):
             nn_model, nn_path, diff_min = (model, path, diff_avg)
         
         print(f"\nDEBUG: differences in {DIR}/{path}: \nbl_sol = {diff_l / NUM_ITERS}, bu_sol = {diff_u / NUM_ITERS}, diff_avg = {diff_avg}")
+
     print(f"\nDEBUG: best model = {nn_path}")
 
     if verbose:
