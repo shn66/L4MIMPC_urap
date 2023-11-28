@@ -14,80 +14,59 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
-INPUTS = 44
-OUTPUT = 2000
+INPUTS = 24
+OUTPUT = 1000
 NUM_ITERS  = 100
 LEARN_RATE = 0.001
-DIR = "pos_weigh_mt" # This file only works on new_models
+
+LAYERS = 10
+HIDDEN = 128
+BATCH  = 1024
+DIR = "final"
+
 
 class Dataset:
-    """
-    info.pkl = [limit, goal, lower_arr, size_arr]
-    solutions.pkl = [[state, bl_sol, bu_sol] ...]
-    """
+    # solutions.pkl = [[state, local_obs, bl_sol, bu_sol], ...]
+
     def __init__(self):
         print("\nDEBUG: Dataset initializing.")
 
-        file = open("data/info.pkl", "rb")
-        self.info = pickle.load(file)
-
-        data = [x for x in os.listdir("data") if x.startswith("sol")]
         self.sols = []
+        data = [x for x in os.listdir("data") if x.startswith("sol")]
 
         for i in range(len(data)):
             file = open(f"data/solutions{i}.pkl", "rb")
-            self.sols += (pickle.load(file))
+            self.sols += pickle.load(file)
 
         self.size = len(self.sols)
         print(f"DEBUG: Dataset initialized. {self.size} datapoints read.")
 
-    
-    def normalize(self):
-        exit(); print("\nDEBUG: Dataset normalizing.")
-
-        lower_arr = self.info[2]
-        size_arr  = self.info[3]
-
-        norm = lambda x, min, max: 2*(x-min)/(max-min)-1 # Normalize between [-1, 1]
-
-        lower_arr[0] = [norm(x,-2.0,17.5) for x in lower_arr[0]] # range[-2.0, 17.5]
-        size_arr[0]  = [norm(x, 0.0, 2.5) for x in size_arr[0]]  # range[0.0, 2.5]
-
-        lower_arr[1] = [norm(y,-5.0, 5.0) for y in lower_arr[1]] # range[-5.0, 5.0]
-        size_arr[1]  = [norm(y, 0.0, 7.0) for y in size_arr[1]]  # range[0.0, 7.0]
-
-        for i in range(self.size):
-            state = self.sols[i][0]
-
-            state[0] = norm(state[0], 0.0, 20.0) # range[0.0, 20.0]
-            state[1] = norm(state[1], -5.0, 5.0) # range[-5.0, 5.0]
-
 
 class BinaryNN(nn.Module):
 
-    def __init__(self, layers, hidden, drops, activ):
+    def __init__(self, drops, activ):
         super(BinaryNN, self).__init__()
 
-        self.activ   = activ
-        self.drops   = drops
         self.dropout = nn.Dropout(0.1)
+        self.drops   = drops
+        self.activ   = activ
         
-        # Input size = 44:
-            # lower_arr shape = (2, 10) = 20
-            # size_arr  shape = (2, 10) = 20
-            # state_arr shape = (4,)    = 4
-        self.input  = nn.Linear(INPUTS, hidden)
+        # Input size = 24:
+            # lower_arr shape = (2, 5) = 10
+            # size_arr  shape = (2, 5) = 10
+            # state_arr shape = 4
+        self.input  = nn.Linear(INPUTS, HIDDEN)
 
-        self.normal = nn.BatchNorm1d(hidden)
+        self.normal = nn.BatchNorm1d(HIDDEN)
         self.modlst = nn.ModuleList()
 
-        for _ in range(layers): # args: (input,  output)
-            self.modlst.append(nn.Linear(hidden, hidden))
+        for _ in range(LAYERS): # args: (input , output)
+            self.modlst.append(nn.Linear(HIDDEN, HIDDEN))
         
-        # Output size = 2000:
-            # bl_sol shape = (10, 2, 50) = 1000
-            # bu_sol shape = (10, 2, 50) = 1000
-        self.output = nn.Linear(hidden, OUTPUT)
+        # Output size = 1000:
+            # bl_sol shape = (5, 2, 50) = 500
+            # bu_sol shape = (5, 2, 50) = 500
+        self.output = nn.Linear(HIDDEN, OUTPUT)
 
 
     def forward(self, x):
@@ -97,59 +76,51 @@ class BinaryNN(nn.Module):
         for layer in self.modlst:
             if self.drops:
                 x = self.dropout(x)
-
             x = self.activ(layer(x))
-        x = self.output(x)
 
+        x = self.output(x)
         return self.activ(x)
 
 
-def model_training(dataset, drops, activ, optiv, layers=10, hidden=100, batch=1024, model=None):
+def model_training(dataset, drops, weigh, activ, optiv, model=None):
     SIZE  = dataset.size
     BOUND = 0.8          # Split data -> 80% train, 20% valid
 
     if not os.path.exists(f"models/{DIR}"):
         os.mkdir(f"models/{DIR}")
 
-    activ_str = str(activ).split(" ")[1]       # Name of activ. func.
-    optiv_str = str(optiv).split(".")[-1][:-2] # Name of optim. class
-
-    PATH = f"models/{DIR}/{batch}=batch_{drops}=drops_{activ_str}=activ_{optiv_str}=optiv.pth"
+    PATH = f"models/{DIR}/{drops}=drops_{weigh}=weigh.pth"
     
-    data   = torch.zeros((SIZE, INPUTS)) # Inputs = 44  (state, obs_arrs)
-    labels = torch.zeros((SIZE, OUTPUT)) # Output = 2000 (bl_sol, bu_sol)
+    data   = torch.zeros((SIZE, INPUTS)) # Inputs = 24  (state, obs_arrs)
+    labels = torch.zeros((SIZE, OUTPUT)) # Output = 1000 (bl_sol, bu_sol)
 
     for i in range(SIZE):
         sols = dataset.sols[i]           # Sample sol @ index i
-
-        state, bl_sol, bu_sol = sols[0], sols[1], sols[2]
-        _, _, lower_arr, size_arr = dataset.info
+        state, obs_arr, bl_sol, bu_sol = sols
 
         tens = lambda x: torch.Tensor(x).view(-1)
 
-        data[i, 0: 20] = tens(lower_arr) # 20 items
-        data[i, 20:40] = tens(size_arr ) # 20 items
-        data[i, 40:44] = tens(state)     # 4. items
-        labels[i, :1000] = tens(bl_sol)  # 1000 items
-        labels[i, 1000:] = tens(bu_sol)  # 1000 items
+        data[i, :4] = tens(state)        # 4 items
+        data[i, 4:] = tens(obs_arr)      # 20 items
+        labels[i, :500] = tens(bl_sol)   # 500 items
+        labels[i, 500:] = tens(bu_sol)   # 500 items
 
     print(f"\nDEBUG: model_training() started. PATH =\n{PATH}")
 
     train_size = int(BOUND * len(data))
     valid_size = len(data) - train_size
 
-
     td = TensorDataset(data, labels)
     train_data, valid_data = random_split(td, [train_size, valid_size])
 
-    train_load = DataLoader(train_data, batch_size=batch, shuffle=True)
-    valid_load = DataLoader(valid_data, batch_size=batch, shuffle=False)
+
+    train_load = DataLoader(train_data, batch_size=BATCH, shuffle=True)
+    valid_load = DataLoader(valid_data, batch_size=BATCH, shuffle=False)
 
     if not model:
-        model = BinaryNN(layers, hidden, drops, activ)
+        model = BinaryNN(drops, activ)
 
-    pos = labels.sum(dim=0)  # Create positive weights for labels
-    pos_weigh = (labels.size(0) - pos) / pos
+    pos_weigh = torch.full((OUTPUT), weigh)
 
     nnBCELoss = nn.BCELoss() # Binary cross entropy (and sigmoid)
     logitLoss = nn.BCEWithLogitsLoss(pos_weight=pos_weigh)
@@ -160,7 +131,7 @@ def model_training(dataset, drops, activ, optiv, layers=10, hidden=100, batch=10
     best_loss = float("inf") # Keep best validation loss
 
     writer = SummaryWriter(f"runs/{DIR}")
-    writer.add_text(DIR, f"{layers} = layers, {hidden} = hidden, {batch} = batch")
+    writer.add_text(DIR, f"{drops}=drops_{weigh}=weigh")
 
     for i in range(NUM_ITERS):
         model.train()
@@ -209,33 +180,7 @@ def model_training(dataset, drops, activ, optiv, layers=10, hidden=100, batch=10
     print("\nmodel_training() finished.")
 
 
-def test_neural_net(dataset, verbose, retrain):
-
-    def get_model_info(path):
-        layers, hidden, batch = 10, 100, 1024
-        drops , activ , optiv = False, fn.relu, optim.Adam
-
-        if DIR == "new_models":
-            path0 = path.split("=")
-            batch = int(path0[0])       # Batch size (1st num)
-
-            path1 = path0[1].split("_")
-            drops = eval(path1[1])      # is_dropout (2nd val)
-
-            path2 = path0[2].split("_") # Activ func (3rd val)
-
-            if path2[1] == "leaky":
-                activ = fn.leaky_relu
-            elif path2[1] == "function":
-                activ = fn.gelu
-
-            path3 = path0[3].split("_") # Optimizer (4th val):
-            optiv = eval(f"optim.{path3[1]}")
-        else:
-            digits = re.findall(r"(\d+)=", path)     # Find digit after "="
-            layers, hidden, batch = map(int, digits)
-
-        return layers, hidden, batch, drops, activ, optiv
+def test_neural_net(dataset, verbose):
 
     def get_model_outs(model):
         BOUND = 0.5          # Sample solution using random index
@@ -278,8 +223,9 @@ def test_neural_net(dataset, verbose, retrain):
         for i in range(10):
             lx, ly = lower_arr[0][i], lower_arr[1][i]
             sx, sy =  size_arr[0][i],  size_arr[1][i]
+
             print(f"obs @({lx}, {ly}), size ({sx}, {sy}): \ndiff_l = \n{diff_l[i]} \ndiff_u = \n{diff_u[i]}")
-            print(f"\nbl_sol[i] = \n{bl_sol[i]} \nbu_sol[i] = \n{bu_sol[i]}")
+            # print(f"\nbl_sol[i] = \n{bl_sol[i]} \nbu_sol[i] = \n{bu_sol[i]}")
 
     nn_model, nn_path = None, None
     diff_min = float("inf")
@@ -287,12 +233,13 @@ def test_neural_net(dataset, verbose, retrain):
     folder = sorted(os.listdir(f"models/{DIR}")) # Same path/types only
     folder = [x for x in folder if len(x) > 10]  # Except for .DS_Store
 
+
     for path in folder:
         diff_l, diff_u = 0.0, 0.0
-        layers, hidden,_,drops, activ,_ = get_model_info(path)
+        drops = eval(path.split("=")[0])
 
-        model = BinaryNN(layers, hidden, drops, activ)
-        load = torch.load(f"models/{DIR}/{path}")
+        model = BinaryNN(drops, fn.leaky_relu) # TODO: fix hardcoding
+        load  = torch.load(f"models/{DIR}/{path}")
 
         model.load_state_dict(load)
         model.eval()
@@ -300,13 +247,14 @@ def test_neural_net(dataset, verbose, retrain):
         for _ in range(NUM_ITERS):
             output, bl_sol, bu_sol = get_model_outs(model)
 
-            bl_out = nums(output[:1000])
-            bu_out = nums(output[1000:])
+            bl_out = nums(output[:500])
+            bu_out = nums(output[500:])
 
             diff_l += np.sum(bl_out != bl_sol) # Compares differences
             diff_u += np.sum(bu_out != bu_sol) # btwn output and data
 
         diff_avg = (diff_l + diff_u) / (2 * NUM_ITERS)
+
         if diff_avg < diff_min:
             nn_model, nn_path, diff_min = (model, path, diff_avg)
         
@@ -315,9 +263,6 @@ def test_neural_net(dataset, verbose, retrain):
 
     if verbose:
         view_model_diff(nn_model)
-    if retrain:
-        layers, hidden, batch , drops, activ, optiv = get_model_info(nn_path)
-        model_training(dataset, drops, activ, optiv, layers, hidden, batch)
     return nn_model
 
 
@@ -388,9 +333,8 @@ if __name__ == "__main__":
     TRAIN   = True
 
     if TRAIN:
-        for drops in [True]:
-            for activ in [fn.leaky_relu]:
-                for optiv in [optim.Adam]:
-                    model_training(dataset, drops, activ, optiv)
+        for drops in [True, False]:
+            for weigh in [0.1, 10]:
+                model_training(dataset, drops, weigh, fn.leaky_relu, optim.Adam)
     else:
-        test_neural_net(dataset, verbose=True, retrain=False)
+        test_neural_net(dataset, verbose=True)
