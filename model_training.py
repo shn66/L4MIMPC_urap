@@ -95,7 +95,6 @@ def model_training(dataset, drops, weigh, activ, optiv, model=None):
 
     for i in range(SIZE):                # Sample sol @ index i
         state, obs_arr, bl_sol, bu_sol = dataset.sols[i]
-        print(obs_arr)
 
         tens = lambda x: torch.Tensor(x).view(-1) # flat tensor
 
@@ -119,7 +118,7 @@ def model_training(dataset, drops, weigh, activ, optiv, model=None):
     if not model:
         model = BinaryNN(drops, activ)
 
-    pos_weigh = torch.full((OUTPUT), weigh) # weight 1s more/less
+    pos_weigh = torch.full((OUTPUT,), weigh) # weight 1s more/less
 
     nnBCELoss = nn.BCELoss() # Binary cross entropy (and sigmoid)
     logitLoss = nn.BCEWithLogitsLoss(pos_weight=pos_weigh)
@@ -328,7 +327,8 @@ if __name__ == "__main__":
 
     if TRAIN:
         for drops in [True, False]:
-            for weigh in [0.1, 10]:
-                model_training(dataset, drops, weigh, fn.leaky_relu, optim.Adam)
+            for weigh in [0.1, 10.0]:
+                for activ in [fn.relu, fn.leaky_relu]:
+                    model_training(dataset, drops, weigh, activ, optim.Adam)
     else:
         test_neural_net(dataset, verbose=True)
