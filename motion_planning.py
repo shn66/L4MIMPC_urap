@@ -342,8 +342,8 @@ def run_simulations(iter_one, iter_end, plot_sol):
     # Randomize start, get vars & params
     for iter in range(iter_one, iter_end):
 
-        start = world.random_state(iters=100, bound=0.8)
-        robot = Robot(start, world_obs, TIME=0.1, FOV=2.0)
+        start = world.random_state(iters=100, bound=0.9)
+        robot = Robot(start, world_obs, TIME=0.1, FOV=1.2)
 
         print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
 
@@ -369,8 +369,8 @@ def run_simulations(iter_one, iter_end, plot_sol):
 
             while (len(lower_cpy[0]) < world.MAX):
                 for i in range(2):
-                    lower_cpy[i].append(-2.5) # [len(L) to world.MAX] are fake obs
-                    size_cpy[i].append(0.0)   # fake obs have lower x,y: -2.0,-2.0
+                    lower_cpy[i].append(-1.5) # [len(L) to world.MAX] are fake obs
+                    size_cpy[i].append(0.0)   # fake obs have lower x,y: -1.5,-1.5
 
             lower_obs.value = np.array(lower_cpy)
             upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
@@ -414,7 +414,7 @@ def run_simulations(iter_one, iter_end, plot_sol):
 
 if __name__ == "__main__":
     iter_one = 0
-    iter_end = 1000
+    iter_end = 3
 
     while iter_one < iter_end: # run_sim return 1=pass; 0=fail
         iter_one += run_simulations(iter_one, iter_end, False)
