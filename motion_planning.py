@@ -376,7 +376,7 @@ def run_simulations(iter_one, iter_end, plot_sol):
 
             # Now collect optimized trajectories
             print(f"\nSolving iter = {iter}")
-            problem.solve(verbose = False)
+            problem.solve(verbose=False)
 
             print(f"Status = {problem.status}")
             print(f"Optimal cost = {round(problem.value, 2)}")
@@ -384,19 +384,20 @@ def run_simulations(iter_one, iter_end, plot_sol):
 
             state_sol = state.value
             input_sol = input.value
-            bl_sol, bu_sol = [], []
 
 
-            if not isinstance(bool_low[0].value, np.ndarray):
+            if not isinstance(state.value, np.ndarray):
                 print("\nDEBUG: invalid sol, skipping iter"); return 0
             
             arnd = lambda x: np.around(x.value, 1).tolist() # Rounds items to .0; -> python list
+
+            bl_sol, bu_sol = [], []
+            obs = [lower_cpy, size_cpy]
 
             for i in range(world.MAX):
                 bl_sol.append(arnd(bool_low[i]))
                 bu_sol.append(arnd(bool_upp[i]))
 
-            obs = [lower_cpy, size_cpy]
             world.solutions.append([robot.state, obs, bl_sol, bu_sol])
 
             robot.update_state(input_sol[0][0], input_sol[1][0])
@@ -408,8 +409,7 @@ def run_simulations(iter_one, iter_end, plot_sol):
         if plot_sol:
             world.plot_problem(np.array(robot.state_traj), start, goal)
 
-        world.export_files(iter)
-        return 1
+        world.export_files(iter); return 1
 
 
 if __name__ == "__main__":
