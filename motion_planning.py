@@ -357,7 +357,6 @@ def run_simulations(iter_one, iter_end, plot_sol):
 
         # Initialize all CP.parameter values
         while dist(goal) > world.TOL:
-
             print(f"DEBUG: abs(distance) to goal: {round(dist(goal), 2)}")
 
             state0.value = np.array(robot.state)
@@ -370,7 +369,7 @@ def run_simulations(iter_one, iter_end, plot_sol):
             while (len(lower_cpy[0]) < world.MAX):
                 for i in range(2):
                     lower_cpy[i].append(-1.5) # [len(L) to world.MAX] are fake obs
-                    size_cpy[i].append(0.0)   # fake obs have lower x,y: -1.5,-1.5
+                    size_cpy[i].append(0.0)   # Fake obs have lower x,y: -1.5,-1.5
 
             lower_obs.value = np.array(lower_cpy)
             upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
@@ -389,21 +388,22 @@ def run_simulations(iter_one, iter_end, plot_sol):
 
 
             if not isinstance(bool_low[0].value, np.ndarray):
-                print("DEBUG: bad solution, skipping iteration")
-                return 0
+                print("\nDEBUG: invalid sol, skipping iter"); return 0
+            
+            arnd = lambda x: np.around(x.value, 1).tolist() # Rounds items to .0; -> python list
 
-            for i in range(world.MAX): # converts np.arrays to py.lists
-                bl_sol.append(np.around(bool_low[i].value, 1).tolist())
-                bu_sol.append(np.around(bool_upp[i].value, 1).tolist())
+            for i in range(world.MAX):
+                bl_sol.append(arnd(bool_low[i]))
+                bu_sol.append(arnd(bool_upp[i]))
 
             obs = [lower_cpy, size_cpy]
             world.solutions.append([robot.state, obs, bl_sol, bu_sol])
 
-            if plot_sol:
-                world.plot_problem(state_sol, start, goal)
-            
             robot.update_state(input_sol[0][0], input_sol[1][0])
             # 1st value in arr(    x_accel    ,    y_accel     )
+
+            if plot_sol:
+                world.plot_problem(state_sol, start, goal)
 
         if plot_sol:
             world.plot_problem(np.array(robot.state_traj), start, goal)
@@ -414,7 +414,7 @@ def run_simulations(iter_one, iter_end, plot_sol):
 
 if __name__ == "__main__":
     iter_one = 0
-    iter_end = 3
+    iter_end = 0
 
-    while iter_one < iter_end: # run_sim return 1=pass; 0=fail
+    while iter_one < iter_end: # run_sim -> 1 = pass; 0 = fail
         iter_one += run_simulations(iter_one, iter_end, False)
