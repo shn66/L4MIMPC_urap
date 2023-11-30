@@ -14,15 +14,18 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
-INPUTS = 24
-OUTPUT = 1000
-NUM_ITERS  = 100
-LEARN_RATE = 0.001
-
 LAYERS = 10
 HIDDEN = 128
-BATCH  = 1024
-DIR = "first"
+INPUTS = 24
+OUTPUT = 1000
+
+ROUND = 0.5
+ITERS = 100
+BATCH = 1024
+LEARN = 0.001
+
+FOLDR = "first"
+MODEL = "False=drops_10.0=weigh_leaky=0.066.pth"
 
 class Dataset:
     # solutions.pkl = [[state, local_obs, bl_sol, bu_sol], ...]
@@ -82,21 +85,18 @@ class BinaryNN(nn.Module):
 
 
 def model_training(dataset, weigh, drops, activ, optiv, model=None):
-    SIZE  = dataset.size
-    BOUND = 0.8          # Split data -> 80% train, 20% valid
+    SIZE  = dataset.size       
 
-    if not os.path.exists(f"models/{DIR}"):
-        os.mkdir(f"models/{DIR}")
+    if not os.path.exists(f"models/{FOLDR}"):
+        os.mkdir(f"models/{FOLDR}")
 
-    PATH = f"models/{DIR}/{drops}=drops_{weigh}=weigh_{activ}.pth"
+    PATH = f"models/{FOLDR}/{drops}=drops_{weigh}=weigh_{activ}.pth"
     
     data   = torch.zeros((SIZE, INPUTS)) # Inputs = 24  (state, obs_arrs)
     labels = torch.zeros((SIZE, OUTPUT)) # Output = 1000 (bl_sol, bu_sol)
 
     for i in range(SIZE):                # Sample sol @ index i
         state, obs_arr, bl_sol, bu_sol = dataset.sols[i]
-
-        tens = lambda x: torch.Tensor(x).view(-1) # flat tensor
 
         data[i, :4] = tens(state)        # 4 items
         data[i, 4:] = tens(obs_arr)      # 20 items
@@ -105,15 +105,15 @@ def model_training(dataset, weigh, drops, activ, optiv, model=None):
 
     print(f"\nDEBUG: model_training() started. PATH =\n{PATH}")
 
-    train_size = int(BOUND * len(data))
+    train_size = int(0.8 * len(data))    # Split data -> 80% train, 20% valid
     valid_size = len(data) - train_size
 
     td = TensorDataset(data, labels)
     train_data, valid_data = random_split(td, [train_size, valid_size])
 
-
     train_load = DataLoader(train_data, batch_size=BATCH, shuffle=True)
     valid_load = DataLoader(valid_data, batch_size=BATCH, shuffle=False)
+
 
     if not model:
         model = BinaryNN(drops, activ)
@@ -123,17 +123,18 @@ def model_training(dataset, weigh, drops, activ, optiv, model=None):
     nnBCELoss = nn.BCELoss() # Binary cross entropy (and sigmoid)
     logitLoss = nn.BCEWithLogitsLoss(pos_weight=pos_weigh)
 
-    optimizer = optiv(model.parameters(), lr=LEARN_RATE)
+    optimizer = optiv(model.parameters(), lr=LEARN)
 
     scheduler = ReduceLROnPlateau(optimizer) # Update LR
     best_loss = float("inf") # Keep best validation loss
 
-    writer = SummaryWriter(f"runs/{DIR}")
-    writer.add_text(DIR, f"{drops}=drops_{weigh}=weigh_{activ}")
+    writer = SummaryWriter(f"runs/{FOLDR}")
+    writer.add_text("PATH", PATH)
 
-    for i in range(NUM_ITERS):
+    for i in range(ITERS):
         model.train()
         train_loss = 0.0
+        valid_loss = 0.0
 
         for inputs, target in train_load:
             optimizer.zero_grad()
@@ -146,7 +147,6 @@ def model_training(dataset, weigh, drops, activ, optiv, model=None):
         
 
         model.eval()
-        valid_loss = 0.0
         with torch.no_grad():
 
             for inputs, target in valid_load:
@@ -169,7 +169,7 @@ def model_training(dataset, weigh, drops, activ, optiv, model=None):
         writer.add_scalar("train_loss", tl, i)
         writer.add_scalar("valid_loss", vl, i)
         
-        print(f"\niter = {i + 1}/{NUM_ITERS}")
+        print(f"\niter = {i + 1}/{ITERS}")
         print(f"learn_rate = {round(lr, 4)}")
         print(f"train_loss = {round(tl, 4)}")
         print(f"valid_loss = {round(vl, 4)}")
@@ -177,57 +177,53 @@ def model_training(dataset, weigh, drops, activ, optiv, model=None):
     writer.close()
     print("\nmodel_training() finished.")
 
-
-BOUND = 0.5
-# Reshape to multi-dim, convert to np.array
-nums = lambda x: x.view(5, 2, 50).detach().numpy()
-
-def get_model_outs(dataset, model):
-
-    i = random.randint(0, dataset.size - 1) # Random sol @ index i
-    state, obs_arr, bl_sol, bu_sol = dataset.sols[i]
-
-    tens = lambda x: torch.Tensor(x).view(-1) # Flat tensor
-
-    input = torch.cat((tens(state), tens(obs_arr)))
-    input = input.unsqueeze(0)         # Add batch dim->input
-    
-    with torch.no_grad():
-        output = torch.sigmoid(model(input))
-    
-    output = output.view(-1)           # Remove the batch dim
-    output = (output >= BOUND).float() # Round ~0.5 to 0 or 1
-
-    return output, obs_arr, np.array(bl_sol), np.array(bu_sol)
-
+nums = lambda x: x.view(5, 2, 50).detach().numpy() # Shape lst to multi-dim -> np.array
+tens = lambda x: torch.Tensor(x).view(-1)          # Shape lst to tensor -> flattens 1D
 
 def test_neural_net(dataset, verbose):
+
+    def get_model_outs(model):
+
+        i = random.randint(0, dataset.size - 1) # Random sol at i
+        state, obs_arr, bl_sol, bu_sol = dataset.sols[i]
+
+        input = torch.cat((tens(state), tens(obs_arr)))
+        input = input.unsqueeze(0)         # Add batch dim->input
+        
+        with torch.no_grad():
+            output = torch.sigmoid(model(input))
+        
+        output = output.view(-1)           # Remove the batch dim
+        output = (output >= ROUND).float() # Round ~0.5 to 0 or 1
+
+        return output, obs_arr, np.array(bl_sol), np.array(bu_sol)
+
     nn_model, nn_path = None, None
     diff_min = float("inf")
 
-    folder = sorted(os.listdir(f"models/{DIR}")) # Same path/types only
-    folder = [x for x in folder if len(x) > 10]  # Except for .DS_Store
-
+    folder = sorted(os.listdir(f"models/{FOLDR}"))  # Same path/types only
+    folder = [x for x in folder if len(x) > 10]     # Except for .DS_Store
 
     for path in folder:
         diff_l, diff_u = 0.0, 0.0
 
-        drops = eval(path.split("=")[0])            # 1st term (boolean)
-        activ = (path.split("_")[-1]).split("=")[0] # last term (string)
+        drops = eval(path.split("=")[0])            # First term (boolean)
+        activ = (path.split("_")[-1]).split("=")[0] # 2-last term (string)
 
-        if activ == "relu": # TODO: fix hardcode
+
+        if activ == "relu": # TODO: fix hardcoding
             activ = fn.relu
         else:
             activ = fn.leaky_relu
 
         model = BinaryNN(drops, activ)
-        load  = torch.load(f"models/{DIR}/{path}")
+        load  = torch.load(f"models/{FOLDR}/{path}")
 
         model.load_state_dict(load)
         model.eval()
 
-        for _ in range(NUM_ITERS):
-            output, _, bl_sol, bu_sol = get_model_outs(dataset, model)
+        for _ in range(ITERS):
+            output, _, bl_sol, bu_sol = get_model_outs(model)
 
             bl_out = nums(output[:500])
             bu_out = nums(output[500:])
@@ -235,17 +231,17 @@ def test_neural_net(dataset, verbose):
             diff_l += np.sum(bl_out != bl_sol) # Compares differences
             diff_u += np.sum(bu_out != bu_sol) # btwn output and data
 
-        diff_avg = (diff_l + diff_u) / (2 * NUM_ITERS)
+        diff_avg = (diff_l + diff_u) / (2 * ITERS)
 
         if diff_avg < diff_min:
             nn_model, nn_path, diff_min = (model, path, diff_avg)
         
-        print(f"\nDEBUG: differences in {DIR}/{path}: \nbl_sol = {diff_l / NUM_ITERS}, bu_sol = {diff_u / NUM_ITERS}, diff_avg = {diff_avg}")
-
-    print(f"\nDEBUG: best model = {nn_path}")
+        print(f"\nDEBUG: differences in {FOLDR}/{path}:\nbl_sol = {diff_l / ITERS}")
+        print(f"bu_sol = {diff_u / ITERS}, diff_avg = {diff_avg}")
 
     if verbose:
-        output, obs_arr, bl_sol, bu_sol = get_model_outs(dataset, model)
+        output, obs_arr, bl_sol, bu_sol = get_model_outs(model)
+
 
         bl_out = nums(output[:500])
         bu_out = nums(output[500:])
@@ -253,14 +249,14 @@ def test_neural_net(dataset, verbose):
         diff_l = np.where(bl_sol != bl_out, "X", ".")
         diff_u = np.where(bu_sol != bu_out, "X", ".")
 
-        print(f"\nDEBUG: differences in output:")
+        lower_x, lower_y = obs_arr[0][0], obs_arr[0][1]
+        size_x , size_y  = obs_arr[1][0], obs_arr[1][1]
 
         for i in range(5):
-            lx, ly = obs_arr[0][0][i], obs_arr[0][1][i]
-            sx, sy = obs_arr[1][0][i], obs_arr[1][1][i]
-
-            print(f"obs @({lx}, {ly}), size ({sx}, {sy}): \ndiff_l = \n{diff_l[i]} \ndiff_u = \n{diff_u[i]}")
-
+            print(f"\nobs at ({lower_x[i]}, {lower_y[i]}), size ({size_x[i]}, {size_y[i]}):")
+            print(f"\ndiff_l =\n{diff_l[i]}\ndiff_u =\n{diff_u[i]}")
+    
+    print(f"\nDEBUG: best model = {nn_path}")
     return nn_model
 
 
@@ -293,6 +289,7 @@ def relaxed_problem():
 
     dist = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
 
+
     # Initialize all CP.parameter values
     while dist(goal) > world.TOL:
 
@@ -315,27 +312,23 @@ def relaxed_problem():
         lower_obs.value = np.array(lower_cpy)
         upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
 
-        ## MODEL STUFF ##
+        ## NEURALNET STUFF ##
 
         model = BinaryNN(False, fn.leaky_relu)
-        load  = torch.load(f"models/{DIR}/False=drops_10.0=weigh_leaky=0.066.pth")
+        load  = torch.load(f"models/{FOLDR}/{MODEL}")
 
         model.load_state_dict(load)
         model.eval()
 
-        tens = lambda x: torch.Tensor(x).view(-1) # Flat tensor
-        input_obs = [lower_cpy, size_cpy]
-
-        print(f"\nDEBUG: robot.state = {robot.state} \ninput_obs = {input_obs}")
-
-        input_tens = torch.cat((tens(robot.state), tens(input_obs)))
-        input_tens = input_tens.unsqueeze(0)         # Add batch dim->input
+        obs = [lower_cpy, size_cpy]
+        intens = torch.cat((tens(robot.state), tens(obs)))
+        intens = intens.unsqueeze(0)     # Add batch dim->input
         
         with torch.no_grad():
-            output = torch.sigmoid(model(input_tens))
+            output = torch.sigmoid(model(intens))
         
         output = output.view(-1)           # Remove the batch dim
-        output = (output >= BOUND).float() # Round ~0.5 to 0 or 1
+        output = (output >= ROUND).float() # Round ~0.5 to 0 or 1
 
         bl_sol = nums(output[:500])
         bu_sol = nums(output[500:])
@@ -344,23 +337,17 @@ def relaxed_problem():
             bool_low[i].value = np.array(bl_sol[i])
             bool_upp[i].value = np.array(bu_sol[i])
 
-        ## SOLVING STUFF ##
-        
-        # Now collect optimized trajectories
+        ## CP.PROBLEM STUFF ##
         problem.solve(verbose = False)
 
         print(f"Status = {problem.status}")
         print(f"Optimal cost = {round(problem.value, 2)}")
         print(f"Solve time = {round(problem.solver_stats.solve_time, 2)} sec.")
 
-        print(f"\nDEBUG: state = {state} \ninput = {input}")
-        print(f"\nDEBUG: state.value = {state.value} \ninput.value = {input.value}")
-
         state_sol = state.value
         input_sol = input.value
         
-        # world.plot_problem(state_sol, start, goal)
-
+        world.plot_problem(state_sol, start, goal)
         robot.update_state(input_sol[0][0], input_sol[1][0])
         # 1st value in arr(    x_accel    ,    y_accel     )
 
