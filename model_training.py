@@ -24,8 +24,8 @@ ITERS = 100
 BATCH = 1024
 LEARN = 0.001
 
-FOLDR = "first"
-MODEL = "False=drops_10.0=weigh_leaky=0.066.pth"
+FOLDR = "retrain"
+MODEL = "True=drops_10.0=weigh_leaky=0.064.pth"
 
 class Dataset:
     # solutions.pkl = [[state, local_obs, bl_sol, bu_sol], ...]
@@ -83,14 +83,17 @@ class BinaryNN(nn.Module):
         x = self.output(x)
         return self.activ(x)
 
+nums = lambda x: x.view(5, 2, 50).detach().numpy() # Shape lst to multi-dim -> np.array
+tens = lambda x: torch.Tensor(x).view(-1)          # Shape lst to tensor -> flattens 1D
 
 def model_training(dataset, weigh, drops, activ, optiv, model=None):
-    SIZE  = dataset.size       
+    SIZE  = dataset.size
 
     if not os.path.exists(f"models/{FOLDR}"):
         os.mkdir(f"models/{FOLDR}")
 
-    PATH = f"models/{FOLDR}/{drops}=drops_{weigh}=weigh_{activ}.pth"
+    activ_str = str(activ).split(" ")[1]
+    PATH = f"models/{FOLDR}/{drops}=drops_{weigh}=weigh_{activ_str}=activ.pth"
     
     data   = torch.zeros((SIZE, INPUTS)) # Inputs = 24  (state, obs_arrs)
     labels = torch.zeros((SIZE, OUTPUT)) # Output = 1000 (bl_sol, bu_sol)
@@ -177,8 +180,6 @@ def model_training(dataset, weigh, drops, activ, optiv, model=None):
     writer.close()
     print("\nmodel_training() finished.")
 
-nums = lambda x: x.view(5, 2, 50).detach().numpy() # Shape lst to multi-dim -> np.array
-tens = lambda x: torch.Tensor(x).view(-1)          # Shape lst to tensor -> flattens 1D
 
 def test_neural_net(dataset, verbose):
 
@@ -237,7 +238,7 @@ def test_neural_net(dataset, verbose):
             nn_model, nn_path, diff_min = (model, path, diff_avg)
         
         print(f"\nDEBUG: differences in {FOLDR}/{path}:\nbl_sol = {diff_l / ITERS}")
-        print(f"bu_sol = {diff_u / ITERS}, diff_avg = {diff_avg}")
+        print(f"bu_sol = {diff_u / ITERS}\ndiff_avg = {diff_avg}")
 
     if verbose:
         output, obs_arr, bl_sol, bu_sol = get_model_outs(model)
@@ -292,9 +293,8 @@ def relaxed_problem():
 
     # Initialize all CP.parameter values
     while dist(goal) > world.TOL:
-
         print(f"DEBUG: abs(distance) to goal: {round(dist(goal), 2)}")
-        
+
         state0.value = np.array(robot.state)
         goal0.value  = np.array(goal)
 
@@ -307,8 +307,9 @@ def relaxed_problem():
         while (len(lower_cpy[0]) < world.MAX):
             for i in range(2):
                 lower_cpy[i].append(-1.5) # [len(L) to world.MAX] are fake obs
-                size_cpy[i].append(0.0)   # fake obs have lower x,y: -1.5,-1.5
+                size_cpy[i].append(0.0)   # Fake obs have lower x,y: -1.5,-1.5
 
+        obs = [lower_cpy, size_cpy]
         lower_obs.value = np.array(lower_cpy)
         upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
 
@@ -320,9 +321,9 @@ def relaxed_problem():
         model.load_state_dict(load)
         model.eval()
 
-        obs = [lower_cpy, size_cpy]
+        
         intens = torch.cat((tens(robot.state), tens(obs)))
-        intens = intens.unsqueeze(0)     # Add batch dim->input
+        intens = intens.unsqueeze(0)       # Add batch dim->input
         
         with torch.no_grad():
             output = torch.sigmoid(model(intens))
@@ -333,23 +334,27 @@ def relaxed_problem():
         bl_sol = nums(output[:500])
         bu_sol = nums(output[500:])
 
+        ## CP.PROBLEM STUFF ##
+
         for i in range(world.MAX):
             bool_low[i].value = np.array(bl_sol[i])
             bool_upp[i].value = np.array(bu_sol[i])
 
-        ## CP.PROBLEM STUFF ##
-        problem.solve(verbose = False)
-
+        problem.solve(verbose=False)
         print(f"Status = {problem.status}")
+
         print(f"Optimal cost = {round(problem.value, 2)}")
         print(f"Solve time = {round(problem.solver_stats.solve_time, 2)} sec.")
 
         state_sol = state.value
         input_sol = input.value
+
+        if not isinstance(state.value, np.ndarray):
+            print("\nDEBUG: invalid sol, skipping iter"); exit()
         
-        world.plot_problem(state_sol, start, goal)
         robot.update_state(input_sol[0][0], input_sol[1][0])
         # 1st value in arr(    x_accel    ,    y_accel     )
+        world.plot_problem(state_sol, start, goal)
 
 
 if __name__ == "__main__":
@@ -357,12 +362,10 @@ if __name__ == "__main__":
     TRAIN   = False
 
     if TRAIN:
-        for weigh in [5.0, 10.0, 20.0]:
-            drops = False
-            activ = fn.leaky_relu
-            optiv = optim.Adam
-            model_training(dataset, weigh, drops, activ, optiv)
+        model = BinaryNN(True, fn.leaky_relu)
+        load  = torch.load(f"models/first/{MODEL}")
+
+        model.load_state_dict(load)
+        model_training(dataset, 10.0, True, fn.leaky_relu, optim.Adam, model)
     else:
-        relaxed_problem()
-        exit()
         test_neural_net(dataset, verbose=True)
