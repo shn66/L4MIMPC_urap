@@ -1,5 +1,4 @@
 import os
-import re
 import copy
 import torch
 import random
@@ -33,14 +32,23 @@ class Dataset:
     def __init__(self):
         print("\nDEBUG: Dataset initializing.")
 
+        PATH = "data/dataset.pkl"
         self.sols = []
-        data = [x for x in os.listdir("data") if x.startswith("sol")]
 
-        for i in range(len(data)):
-            file = open(f"data/solutions{i}.pkl", "rb")
-            self.sols += pickle.load(file)
+        if os.path.exists(PATH):
+            file = open(PATH, "rb")
+            self.sols = pickle.load(file)
+        else:
+            data = [x for x in os.listdir("data") if x.startswith("sol")]
 
+            for i in range(len(data)):
+                file = open(f"data/solutions{i}.pkl", "rb")
+                self.sols += pickle.load(file)
+
+            file = open(PATH, "wb")
+            pickle.dump(self.sols, file)
         self.size = len(self.sols)
+
         print(f"DEBUG: Dataset initialized. {self.size} datapoints read.")
 
 
@@ -261,7 +269,7 @@ def test_neural_net(dataset, verbose):
     return nn_model
 
 
-def relaxed_problem():
+def relaxed_problem(use_model):
     # A MODIFIED motion planning problem
 
     lower_arr = [[ 0.5, 1.7, 2.7, 2.7, 3.8], # x coords
@@ -277,11 +285,20 @@ def relaxed_problem():
     world_obs = mp.ObsMap(lower_arr, size_arr)
     world = mp.World(limit, goal, world_obs, TOL=0.2)
 
+
     # Randomize start, get vars & params
-    start = world.random_state(iters=100, bound=0.9)
+    start, obs_arr = [], []
+    bl_sol, bu_sol = [], []
+
+    if use_model:
+        start = world.random_state(iters=100, bound=0.9)
+    else:
+        i = random.randint(0, dataset.size - 1) # Random sol at i
+        start, obs_arr, bl_sol, bu_sol = dataset.sols[i]
+    
     robot = mp.Robot(start, world_obs, TIME=0.1, FOV=1.2)
 
-    print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
+    print(f"\nDEBUG: randomize start done: {[round(x, 2) for x in start]}")
 
     problem, vars, params = mp.motion_planning(world, robot, relaxed=True)
 
@@ -293,6 +310,7 @@ def relaxed_problem():
 
     # Initialize all CP.parameter values
     while dist(goal) > world.TOL:
+
         print(f"DEBUG: abs(distance) to goal: {round(dist(goal), 2)}")
 
         state0.value = np.array(robot.state)
@@ -300,39 +318,47 @@ def relaxed_problem():
 
         ## OBSTACLE STUFF ##
 
-        robot.detect_obs()
-        lower_cpy = copy.deepcopy(robot.local_obs.lower_arr)
-        size_cpy  = copy.deepcopy(robot.local_obs.size_arr)
+        lower_cpy, size_cpy, obs_tens = [], [], []
 
-        while (len(lower_cpy[0]) < world.MAX):
-            for i in range(2):
-                lower_cpy[i].append(-1.5) # [len(L) to world.MAX] are fake obs
-                size_cpy[i].append(0.0)   # Fake obs have lower x,y: -1.5,-1.5
+        if use_model:
+            robot.detect_obs()
 
-        obs = [lower_cpy, size_cpy]
+            lower_cpy = copy.deepcopy(robot.local_obs.lower_arr)
+            size_cpy  = copy.deepcopy(robot.local_obs.size_arr)
+
+            while (len(lower_cpy[0]) < world.MAX):
+                for i in range(2):
+                    lower_cpy[i].append(-1.5) # [len(L) to world.MAX] are fake obs
+                    size_cpy[i].append(0.0)   # Fake obs have lower x,y: -1.5,-1.5
+
+            obs_tens  = [lower_cpy, size_cpy]
+        else:
+            lower_cpy = obs_arr[0]
+            size_cpy  = obs_arr[1]
+
         lower_obs.value = np.array(lower_cpy)
         upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
 
         ## NEURALNET STUFF ##
 
-        model = BinaryNN(False, fn.leaky_relu)
-        load  = torch.load(f"models/{FOLDR}/{MODEL}")
+        if use_model:
+            model = BinaryNN(False, fn.leaky_relu)
+            load  = torch.load(f"models/{FOLDR}/{MODEL}")
 
-        model.load_state_dict(load)
-        model.eval()
+            model.load_state_dict(load)
+            model.eval()
+            
+            intens = torch.cat((tens(robot.state), tens(obs_tens)))
+            intens = intens.unsqueeze(0)       # Add batch dim->input
+            
+            with torch.no_grad():
+                output = torch.sigmoid(model(intens))
+            
+            output = output.view(-1)           # Remove the batch dim
+            output = (output >= ROUND).float() # Round ~0.5 to 0 or 1
 
-        
-        intens = torch.cat((tens(robot.state), tens(obs)))
-        intens = intens.unsqueeze(0)       # Add batch dim->input
-        
-        with torch.no_grad():
-            output = torch.sigmoid(model(intens))
-        
-        output = output.view(-1)           # Remove the batch dim
-        output = (output >= ROUND).float() # Round ~0.5 to 0 or 1
-
-        bl_sol = nums(output[:500])
-        bu_sol = nums(output[500:])
+            bl_sol = nums(output[:500])
+            bu_sol = nums(output[500:])
 
         ## CP.PROBLEM STUFF ##
 
@@ -368,4 +394,6 @@ if __name__ == "__main__":
         model.load_state_dict(load)
         model_training(dataset, 10.0, True, fn.leaky_relu, optim.Adam, model)
     else:
+        relaxed_problem(use_model=False)
+        exit()
         test_neural_net(dataset, verbose=True)
