@@ -292,7 +292,7 @@ def relaxed_problem(use_model):
         i = random.randint(0, dataset.size - 1) # Random sol at i
         start, obs_arr, bl_sol, bu_sol = dataset.sols[i]
     
-    robot = mp.Robot(start, world_obs, TIME=0.1, FOV=1.2)
+    robot = mp.Robot(start, world_obs, TIME=0.1, FOV=1.5)
 
     print(f"\nDEBUG: randomize start done: {[round(x, 2) for x in start]}")
 

@@ -43,21 +43,21 @@ class ObsMap:
 
             if (lower_x == self.lower_arr[0][i] and
                 lower_y == self.lower_arr[1][i] and
-                size_x == self.size_arr[0][i] and
-                size_y == self.size_arr[1][i]):
+                size_x  == self.size_arr [0][i] and
+                size_y  == self.size_arr [1][i]):
                 found = True
 
         if not found: # append all 4 vals to arrays
             self.lower_arr[0].append(lower_x)
             self.lower_arr[1].append(lower_y)
-            self.size_arr[0].append(size_x)
-            self.size_arr[1].append(size_y)
+            self.size_arr [0].append(size_x)
+            self.size_arr [1].append(size_y)
 
     
     def unwrap(self): # return (x,y)->(lower, size)
-        l = self.lower_arr
-        s = self.size_arr
-        return l[0], s[0], l[1], s[1]
+        lower = self.lower_arr
+        size  = self.size_arr
+        return lower[0], size[0], lower[1], size[1]
     
     def __str__(self):
         return f"lower_arr = {self.lower_arr}\nsize_arr = {self.size_arr}"
@@ -158,12 +158,12 @@ class Robot:
 
         for i in range(len(self.world_obs)):  # loop through each obstacle
             lower = lower_x[i]                # obs's lower corner x value
-            size = size_x[i]                  # obs's width in x direction
+            size  = size_x[i]                 # obs's width in x direction
             
-            upper = lower + size              # is obs's corner within FOV
+            upper  = lower + size             # is obs's corner within FOV
             in_FOV = lambda obs: obs >= x_pos and obs <= x_pos + self.FOV
 
-            if (in_FOV(lower) or in_FOV(upper)): # FOV fully capture obstacle
+            if (in_FOV(lower) or in_FOV(upper)):   # FOV partly sees obstacle
                 self.local_obs.insert((lower, size), (lower_y[i], size_y[i]))
                 # add unchanged vals ((  x_items  ), (       y_items       ))
     
@@ -328,7 +328,7 @@ def run_simulations(num_iters, plot_sol):
     for iter in range(num_iters):
 
         start = world.random_state(iters=100, bound=0.9)
-        robot = Robot(start, world_obs, TIME=0.1, FOV=1.2)
+        robot = Robot(start, world_obs, TIME=0.1, FOV=1.5)
 
         print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
 
