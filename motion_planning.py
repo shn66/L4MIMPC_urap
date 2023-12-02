@@ -132,20 +132,6 @@ class World:
         plt.show()
 
 
-    def export_files(self, iter):
-        if not os.path.exists("data"):
-            os.mkdir("data")
-
-        # if not os.path.exists("data/info.pkl"):
-        #     obs = self.world_obs
-        #     file = open("data/info.pkl", "wb")
-        #     pickle.dump([obs.lower_arr, obs.size_arr], file)
-
-        file = open(f"data/solutions{iter}.pkl", "wb")
-        pickle.dump(self.solutions, file)
-        self.solutions = []
-
-
 class Robot:
     """
     state = [pos_x, pos_y, vel_x, vel_y]
@@ -202,7 +188,7 @@ class Robot:
         print(f"\nDEBUG: update_state() done = {[round(x, 2) for x in self.state]}")
 
 
-def motion_planning(world, robot, relaxed):
+def motion_planning(world, robot, relaxed, N=25):
     """
     Inputs:
     obs_size:   2 x num_obs array, describing width and height of the obstacles, num_obs = # of obstacles
@@ -214,7 +200,6 @@ def motion_planning(world, robot, relaxed):
     params:     parameters for the motion planning problem = [initial state, goal state]
     """
 #### Dynamics model data ####
-    ## SEE SCREENSHOT 1 ##
     dt = robot.TIME
 
     A = np.matrix(
@@ -234,10 +219,8 @@ def motion_planning(world, robot, relaxed):
     
 
 #### Robot constraints ####
-    ## SEE SCREENSHOT 2 ##
     Q = 100 * np.identity(dim_state)
     R = 50  * np.identity(dim_input)
-    N = 50
     
 ## Vars & Parameters
     # Declare variables for state and input trajectories
@@ -256,18 +239,19 @@ def motion_planning(world, robot, relaxed):
     limit_l = world.limit[0] # lower arr[pos_x, pos_y,
     limit_u = world.limit[1] # upper arr vel_x, vel_y]
 
-    lower_x = cp.vstack([x_pos - world.TOL] + limit_l[1:])      # arr[pos-TOL, -5, -1, -1]
-    upper_x = cp.vstack([limit_u[0] + world.TOL] + limit_u[1:]) # arr[lim_u +TOL, 5, 1, 1]
+    lower_x = cp.vstack([x_pos - world.TOL] + limit_l[1:]) # arr[pos-TOL, -5, -1, -1]
+    upp_fov = cp.minimum(x_pos + robot.FOV, limit_u[0])    # min(pos +FOV, maximum x)
+    upper_x = cp.vstack([upp_fov] + limit_u[1:])           # arr[lim_u +TOL, 5, 1, 1]
     
     lower_x = lower_x[:, 0]      # resize arr shape from
     upper_x = upper_x[:, 0]      # (4, 1) to (4) idk why
 
-    lower_u = np.array([-2, -2]) # input u_t lies within
-    upper_u = -1 * lower_u       # low_u <= u_t <= upp_u
+    lower_u = np.array([-1, -1]) # input u_t lies within
+    upper_u = np.array([ 1,  1]) # low_u <= u_t <= upp_u
 
 
 #### Obstacle avoidance ####
-    # Declaring binary variables for obstacle avoidance formulation
+    # Declaring binary variables for obstacle avoidance paths
     bool_low, bool_upp = [], []
 
     for _ in range(world.MAX):
@@ -278,10 +262,10 @@ def motion_planning(world, robot, relaxed):
             bool_low.append(cp.Variable((2, N), boolean=True))
             bool_upp.append(cp.Variable((2, N), boolean=True))
 
-    # DONE: Big-M hardcoded to 2 * upper_limit_x, 2 * upper_limit_y
+    # Big-M hardcoded to 2 * upper_limit_x, 2 * upper_limit_y
     M = np.diag([2 * limit_u[0], 2 * limit_u[1]])
     
-    constraints = [state[:, 0] == state0]# initial state constraint
+    constraints = [state[:, 0] == state0] # state constraints
     objective = 0
     
     for k in range(N):
@@ -302,15 +286,16 @@ def motion_planning(world, robot, relaxed):
                 state[0:2, k + 1] >= upper_obs[:, i] - M @ bool_upp[i][:, k]]
             
             # IF YOU SATISFY ALL 4 OF OBS'S CONSTRAINTS, YOURE IN THE OBS.
-            constraints += [
-                bool_low[i][0, k] + bool_low[i][1, k] + bool_upp[i][0, k] + bool_upp[i][1, k] <= 3]
+            if not relaxed:
+                constraints += [bool_low[i][0, k] + bool_low[i][1, k] +
+                                bool_upp[i][0, k] + bool_upp[i][1, k] <= 3]
 
         ## SEE SCREENSHOT 2 ##
         # calculating cumulative cost
-        objective += cp.norm(Q @ (state[:, k] - goal0), "inf") + cp.norm(R @ input[:, k], "inf") 
+        objective += cp.norm(Q @ (state[:, k] - goal0), 1) + cp.norm(R @ input[:, k], 1) 
     
     # adding extreme penalty on terminal state to encourage getting close to the goal
-    objective += 100 * cp.norm(Q @ (state[:, -1] - goal0), "inf")
+    objective += 100 * cp.norm(Q @ (state[:, -1] - goal0), 1)
 
     # Define the motion planning problem
     problem = cp.Problem(cp.Minimize(objective), constraints)
@@ -323,7 +308,7 @@ def motion_planning(world, robot, relaxed):
         return problem, (state, input, bool_low, bool_upp), (state0, goal0, lower_obs, upper_obs)
 
 
-def run_simulations(iter_one, iter_end, plot_sol):
+def run_simulations(num_iters, plot_sol):
     # Create the motion planning problem
 
     lower_arr = [[ 0.5, 1.7, 2.7, 2.7, 3.8], # x coords
@@ -332,15 +317,15 @@ def run_simulations(iter_one, iter_end, plot_sol):
     size_arr  = [[0.7, 0.5, 0.5, 0.5, 0.7],  # width: x
                  [1.0, 0.7, 1.0, 1.0, 1.0]]  # height:y
     
-    limit = [[0.0,-1.2,-1.0,-1.0], # lower[pos_x, pos_y,
-             [5.0, 1.2, 1.0, 1.0]] # upper vel_x, vel_y]
+    limit = [[0.0,-1.2,-0.7,-0.7], # lower[pos_x, pos_y,
+             [5.0, 1.2, 0.7, 0.7]] # upper vel_x, vel_y]
     goal  =  [5.0, 0.0, 0.0, 0.0]
     
     world_obs = ObsMap(lower_arr, size_arr)
     world = World(limit, goal, world_obs, TOL=0.2)
 
     # Randomize start, get vars & params
-    for iter in range(iter_one, iter_end):
+    for iter in range(num_iters):
 
         start = world.random_state(iters=100, bound=0.9)
         robot = Robot(start, world_obs, TIME=0.1, FOV=1.2)
@@ -357,6 +342,7 @@ def run_simulations(iter_one, iter_end, plot_sol):
 
         # Initialize all CP.parameter values
         while dist(goal) > world.TOL:
+
             print(f"DEBUG: abs(distance) to goal: {round(dist(goal), 2)}")
 
             state0.value = np.array(robot.state)
@@ -366,10 +352,12 @@ def run_simulations(iter_one, iter_end, plot_sol):
             lower_cpy = copy.deepcopy(robot.local_obs.lower_arr)
             size_cpy  = copy.deepcopy(robot.local_obs.size_arr)
 
-            while (len(lower_cpy[0]) < world.MAX):
-                for i in range(2):
-                    lower_cpy[i].append(-1.5) # [len(L) to world.MAX] are fake obs
-                    size_cpy[i].append(0.0)   # Fake obs have lower x,y: -1.5,-1.5
+            while len(lower_cpy[0]) < world.MAX:    # Ensure arr len = MAX
+                low = min(limit[0][0], limit[0][1]) # Get low within big-M
+                
+                for i in [0, 1]:             # Add fake obs to x(0) & y(1)
+                    lower_cpy[i].append(low) # Fake obs have lower x,y val
+                    size_cpy [i].append(0.0) # outside of world; size: 0.0
 
             lower_obs.value = np.array(lower_cpy)
             upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
@@ -382,14 +370,12 @@ def run_simulations(iter_one, iter_end, plot_sol):
             print(f"Optimal cost = {round(problem.value, 2)}")
             print(f"Solve time = {round(problem.solver_stats.solve_time, 2)} sec.")
 
+
             state_sol = state.value
             input_sol = input.value
 
-
-            if not isinstance(state.value, np.ndarray):
-                print("\nDEBUG: invalid sol, skipping iter"); return 0
-            
-            arnd = lambda x: np.around(x.value, 1).tolist() # Rounds items to .0; -> python list
+            # Rounds values to X.0; returns list
+            arnd = lambda x: np.around(x.value, 1).tolist()
 
             bl_sol, bu_sol = [], []
             obs = [lower_cpy, size_cpy]
@@ -409,12 +395,10 @@ def run_simulations(iter_one, iter_end, plot_sol):
         if plot_sol:
             world.plot_problem(np.array(robot.state_traj), start, goal)
 
-        world.export_files(iter); return 1
+        file = open(f"data/sol{iter}.pkl", "wb")
+        pickle.dump(world.solutions, file)
+        world.solutions = []
 
 
 if __name__ == "__main__":
-    iter_one = 0
-    iter_end = 0
-
-    while iter_one < iter_end: # run_sim -> 1 = pass; 0 = fail
-        iter_one += run_simulations(iter_one, iter_end, False)
+    run_simulations(num_iters=2000, plot_sol=False)
