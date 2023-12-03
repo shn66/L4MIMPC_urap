@@ -368,7 +368,7 @@ def run_simulations(num_iters, plot_sol):
 
             print(f"Status = {problem.status}")
             print(f"Optimal cost = {round(problem.value, 2)}")
-            print(f"Solve time = {round(problem.solver_stats.solve_time, 2)} sec.")
+            print(f"Solve time = {round(problem.solver_stats.solve_time, 4)}s")
 
 
             state_sol = state.value
