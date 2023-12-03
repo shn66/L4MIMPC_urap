@@ -19,10 +19,10 @@ HIDDEN = 128
 INPUTS = 24
 OUTPUT = 500
 
-ITERS = 100
+ITERS = 256
 BATCH = 1024
 LEARN = 0.001
-MODEL = "norms=1_drops=0_weigh=1_activ=leaky_relu.pth"
+MODEL = "norms=0_drops=0_weigh=0_activ=leaky_relu.pth"
 
 class Dataset:
     # solutions.pkl = [[state, local_obs, bl_sol, bu_sol], ...]
