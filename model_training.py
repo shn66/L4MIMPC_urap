@@ -21,7 +21,7 @@ OUTPUT = 500
 ITERS = 100
 BATCH = 1024
 LEARN = 0.001
-MODEL = "_"
+MODEL = "True=drops_10.0=weigh_leaky_relu=activ.pth"
 
 class Dataset:
     # solutions.pkl = [[state, local_obs, bl_sol, bu_sol], ...]
@@ -88,7 +88,7 @@ class BinaryNN(nn.Module):
         x = self.output(x)
         return self.activ(x)
 
-nums = lambda x: x.view(5, 2, 50).detach().numpy() # Shape lst to multi-dim -> np.array
+nums = lambda x: x.view(5, 2, 25).detach().numpy() # Shape lst to multi-dim -> np.array
 tens = lambda x: torch.Tensor(x).view(-1)          # Shape lst to tensor -> flattens 1D
 
 def model_training(dataset, weigh, drops, activ, optiv, model=None):
@@ -126,7 +126,7 @@ def model_training(dataset, weigh, drops, activ, optiv, model=None):
     if not model:
         model = BinaryNN(drops, activ)
 
-    pos_weigh = torch.full((OUTPUT,), weigh) # weight 1s more/less
+    pos_weigh = torch.full((OUTPUT,), weigh) # weigh 1 more or less
 
     nnBCELoss = nn.BCELoss() # Binary cross entropy (and sigmoid)
     logitLoss = nn.BCEWithLogitsLoss(pos_weight=pos_weigh)
@@ -380,10 +380,10 @@ def relaxed_problem(use_model):
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN   = True
+    TRAIN   = False
 
     if TRAIN:
-        for weigh in [0.0, 5.0, 10.0, 20.0]:
+        for weigh in [0.1, 5.0, 10.0, 20.0]:
             for drops in [True, False]:
                 model_training(dataset, weigh, drops, fn.leaky_relu, optim.Adam)
     else:

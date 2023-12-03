@@ -325,7 +325,7 @@ def run_simulations(num_iters, plot_sol):
     world = World(limit, goal, world_obs, TOL=0.2)
 
     # Randomize start, get vars & params
-    for iter in range(num_iters):
+    for iter in range(1019, num_iters):
 
         start = world.random_state(iters=100, bound=0.9)
         robot = Robot(start, world_obs, TIME=0.1, FOV=1.5)
