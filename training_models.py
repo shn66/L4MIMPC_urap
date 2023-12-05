@@ -205,7 +205,7 @@ def get_model_outs(dataset, path, state=[], obs_arr=[], model=None):
         model.eval()
 
     bl_sol, bu_sol = [], []
-    if (not state) or (not obs_arr): # Random sol @ index i
+    if not state or not obs_arr: # Random sol @ index i
         
         i = random.randint(0, dataset.size - 1)
         state, obs_arr, bl_sol, bu_sol = dataset.sols[i]

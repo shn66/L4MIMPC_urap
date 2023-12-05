@@ -155,7 +155,7 @@ class Robot:
             upper  = lower + size             # is obs's corner within FOV
             in_FOV = lambda obs: obs >= x_pos and obs <= x_pos + self.FOV
 
-            if (in_FOV(lower) or in_FOV(upper)):   # FOV partly sees obstacle
+            if in_FOV(lower) or in_FOV(upper):   # FOV partly sees obstacle
                 self.local_obs.insert((lower, size), (lower_y[i], size_y[i]))
     
 

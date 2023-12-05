@@ -147,6 +147,23 @@ def relaxed_problem(dataset, use_model):
         print(f"Solve time = {round(problem.solver_stats.solve_time, 4)}s")
 
         state_sol, input_sol = state.value, input.value
+
+        if not state_sol or not input_sol:
+            print("\nDEBUG: invalid solution. Solving backup problem")
+
+            B_problem, B_vars, B_params = mp.motion_planning(world, robot, relaxed=False, horizon=5)
+
+            B_state , B_input, B_bool_low , B_bool_upp  = B_vars
+            B_state0, B_goal0, B_lower_obs, B_upper_obs = B_params
+
+            B_state0.value = np.array(robot.state)
+            B_goal0.value  = np.array(goal)
+
+            B_lower_obs.value = np.array(lower_cpy)
+            B_upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
+
+            B_problem.solve(verbose=False)
+            state_sol, input_sol = B_state.value, B_input.value
         
         robot.update_state(input_sol[0][0], input_sol[1][0])
         world.plot_problem(state_sol, start, goal)
