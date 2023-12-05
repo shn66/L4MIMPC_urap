@@ -16,7 +16,6 @@ class ObsMap:
     def __init__(self, lower_arr, size_arr):
         self.lower_arr = lower_arr
         self.size_arr  = size_arr
-        self.len   = len(size_arr[0])
 
         case = 0
         if not len(lower_arr) == len(size_arr) == 2:
@@ -33,12 +32,12 @@ class ObsMap:
             print(f"\nERROR: Obs_Map.init() failed @ case {case}"); exit()
 
 
-    def insert(self, items_x, items_y): # items_x = (lower_x, size_x)
-        lower_x, size_x = items_x
+    def insert(self, items_x, items_y):
+        lower_x, size_x = items_x  # items_x = (lower_x, size_x)
         lower_y, size_y = items_y
         found = False 
         
-        for i in range(self.len): # check all 4 vals at index i
+        for i in range(len(self)): # check all 4 vals at index i
             if (lower_x == self.lower_arr[0][i] and
                 lower_y == self.lower_arr[1][i] and
                 size_x  == self.size_arr [0][i] and
@@ -59,6 +58,9 @@ class ObsMap:
     
     def __str__(self):
         return f"lower_arr = {self.lower_arr}\nsize_arr = {self.size_arr}"
+    
+    def __len__(self):
+        return len(self.size_arr[0])
 
 
 class World:
@@ -76,7 +78,7 @@ class World:
 
         self.solutions = []
         self.world_obs = world_obs # Obs_Map
-        self.MAX = world_obs.len   # integer
+        self.MAX = len(world_obs)  # integer
 
 
     def random_state(self, iters, bound):
@@ -92,7 +94,7 @@ class World:
             upper_y = np.array(lower_y) + np.array(size_y) # lower_xy + size_xy
             
             in_obs = False
-            for i in range(self.world_obs.len):  # loop through every obs
+            for i in range(len(self.world_obs)):           # loop through every obs
 
                 if (x >= lower_x[i] and x <= upper_x[i] and
                     y >= lower_y[i] and y <= upper_y[i]):  # if inside walls of obs
@@ -115,7 +117,7 @@ class World:
         plt.plot(start[0], start[1], "*", linewidth=10, label="start")
         plt.plot(goal[0],  goal[1],  "*", linewidth=10, label="goal")
 
-        for i in range(self.world_obs.len):
+        for i in range(len(self.world_obs)):
             label = "obstacle" if i == 0 else ""
 
             plt.gca().add_patch(Rectangle((lower_arr[0][i], lower_arr[1][i]),
@@ -149,7 +151,7 @@ class Robot:
         x_pos = self.state[0]                 # state = [x_pos, y_pos,...]
         lower_x, size_x, lower_y, size_y = self.world_obs.unwrap()
 
-        for i in range(self.world_obs.len):   # loop through each obstacle
+        for i in range(len(self.world_obs)):  # loop through each obstacle
             lower, size = lower_x[i], size_x[i]
             
             upper  = lower + size             # is obs's corner within FOV
@@ -212,7 +214,7 @@ def motion_planning(world, robot, relaxed, horizon=None):
 #### Robot constraints ####
     Q = 100 * np.identity(dim_state)
     R = 50  * np.identity(dim_input)
-    N = 25  # default horizon
+    N = 25 if not horizon else horizon
 
 ## Vars & Parameters
     # Declare variables for state and input trajectories

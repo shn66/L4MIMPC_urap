@@ -92,7 +92,7 @@ def relaxed_problem(dataset, use_model):
     # Randomize start, get vars & params
     if use_model:
         # start = world.random_state(iters=100, bound=0.1)
-        start = [0.4, -0.7, 0.0, 0.0]
+        start = [0.0, -0.5, 0.0, 0.0]
     else:
         i = random.randint(0, dataset.size - 1) # Random sol @ index i
         start, obs_arr, bl_sol, bu_sol = dataset.sols[i]
@@ -154,7 +154,7 @@ def relaxed_problem(dataset, use_model):
 
             B_problem, B_vars, B_params = mp.motion_planning(world, robot, relaxed=False, horizon=5)
 
-            B_state , B_input, B_bool_low , B_bool_upp  = B_vars
+            B_state , B_input, _, _ = B_vars
             B_state0, B_goal0, B_lower_obs, B_upper_obs = B_params
 
             B_state0.value = np.array(robot.state)
