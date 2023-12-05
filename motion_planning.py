@@ -1,11 +1,9 @@
-import os
-import copy
 import random
-import pickle
 import numpy as np
 import cvxpy as cp
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+
 
 class ObsMap:
     """
@@ -18,29 +16,29 @@ class ObsMap:
     def __init__(self, lower_arr, size_arr):
         self.lower_arr = lower_arr
         self.size_arr  = size_arr
+        self.len   = len(size_arr[0])
 
-        case = 0 # checks both arrays have x, y
-        if not (len(lower_arr) == len(size_arr) == 2):
-            case = 1
-        else:    # check all len(arr) are equal
+        case = 0
+        if not len(lower_arr) == len(size_arr) == 2:
+            case = 1          # checks both arrays for x and y
+        else:                   
             for arr in lower_arr + size_arr:
                 if len(arr) != len(lower_arr[0]):
-                    case = 2
+                    case = 2  # checks len of all arrays equal
                     break       
                 if not all(isinstance(i, float) for i in arr):
-                    case = 3    # checks all values are floats
+                    case = 3  # checks all elements are floats
                     break 
         if case != 0:
             print(f"\nERROR: Obs_Map.init() failed @ case {case}"); exit()
 
 
-    def insert(self, items_x, items_y):
-        lower_x, size_x = items_x # items_x = (lower_x, size_x)
+    def insert(self, items_x, items_y): # items_x = (lower_x, size_x)
+        lower_x, size_x = items_x
         lower_y, size_y = items_y
-
-        found = False # check all 4 vals at index i
-        for i in range(len(self.lower_arr[0])):
-
+        found = False 
+        
+        for i in range(self.len): # check all 4 vals at index i
             if (lower_x == self.lower_arr[0][i] and
                 lower_y == self.lower_arr[1][i] and
                 size_x  == self.size_arr [0][i] and
@@ -54,16 +52,13 @@ class ObsMap:
             self.size_arr [1].append(size_y)
 
     
-    def unwrap(self): # return (x,y)->(lower, size)
+    def unwrap(self): # return x(lower, size), y(,)
         lower = self.lower_arr
         size  = self.size_arr
         return lower[0], size[0], lower[1], size[1]
     
     def __str__(self):
         return f"lower_arr = {self.lower_arr}\nsize_arr = {self.size_arr}"
-    
-    def __len__(self):
-        return len(self.size_arr[0])
 
 
 class World:
@@ -72,10 +67,7 @@ class World:
              [5.0, 1.2, 1.0, 1.0]] # upper vel_x, vel_y]
 
     goal = [x_pos, y_pos, x_vel, y_vel]
-    solutions = [[state, bl_sol, bu_sol], ...]
-
-    world_obs = Obstacle_Map()
-    MAX = integer max # of obs
+    solutions = [[state, local_obs, bl_sol, bu_sol] ...]
     """
     def __init__(self, limit, goal, world_obs, TOL):
         self.limit = limit
@@ -83,12 +75,12 @@ class World:
         self.TOL   = TOL
 
         self.solutions = []
-        self.world_obs = world_obs
-        self.MAX = len(world_obs)
+        self.world_obs = world_obs # Obs_Map
+        self.MAX = world_obs.len   # integer
 
 
     def random_state(self, iters, bound):
-        lower, upper = self.limit # unpack array -> 2 vars
+        lower, upper = self.limit
 
         for _ in range(iters):                             # random starting state:
             x = random.uniform(lower[0], upper[0] * bound) # within x_width * bound
@@ -100,14 +92,14 @@ class World:
             upper_y = np.array(lower_y) + np.array(size_y) # lower_xy + size_xy
             
             in_obs = False
-            for i in range(len(self.world_obs)):  # loop through every obs
+            for i in range(self.world_obs.len):  # loop through every obs
+
                 if (x >= lower_x[i] and x <= upper_x[i] and
-                    y >= lower_y[i] and y <= upper_y[i]):
-                    
-                    in_obs = True                 # if inside walls of obs
-                    break                         # break to get new state
-            if not in_obs:                        # else return this state
-                return [x, y, 0.0, 0.0]
+                    y >= lower_y[i] and y <= upper_y[i]):  # if inside walls of obs
+                    in_obs = True
+                    break                                  # break to get new state
+            if not in_obs:
+                return [x, y, 0.0, 0.0]                    # else return this state
 
         print("\nERROR: random_state() couldn't find valid state"); exit()
 
@@ -123,11 +115,12 @@ class World:
         plt.plot(start[0], start[1], "*", linewidth=10, label="start")
         plt.plot(goal[0],  goal[1],  "*", linewidth=10, label="goal")
 
-        for i in range(len(self.world_obs)):
+        for i in range(self.world_obs.len):
             label = "obstacle" if i == 0 else ""
 
             plt.gca().add_patch(Rectangle((lower_arr[0][i], lower_arr[1][i]),
                 size_arr[0][i], size_arr[1][i], ec="r", fc="r", label=label))
+            
         plt.legend(loc = 4)
         plt.show()
 
@@ -135,7 +128,7 @@ class World:
 class Robot:
     """
     state = [pos_x, pos_y, vel_x, vel_y]
-    global/local_obs = Obstacle_Map()
+    world and local_obs = Obstacle_Map()
 
     TIME = seconds between state updates
     FOV = Field Of View: range in x dir.
@@ -145,7 +138,7 @@ class Robot:
         self.TIME  = TIME
         self.FOV   = FOV
 
-        self.world_obs = world_obs
+        self.world_obs  = world_obs
         self.local_obs  = ObsMap([[], []], [[], []])
 
         self.state_traj = [[], [], [], []]    # track vars by updating arr
@@ -156,27 +149,25 @@ class Robot:
         x_pos = self.state[0]                 # state = [x_pos, y_pos,...]
         lower_x, size_x, lower_y, size_y = self.world_obs.unwrap()
 
-        for i in range(len(self.world_obs)):  # loop through each obstacle
-            lower = lower_x[i]                # obs's lower corner x value
-            size  = size_x[i]                 # obs's width in x direction
+        for i in range(self.world_obs.len):   # loop through each obstacle
+            lower, size = lower_x[i], size_x[i]
             
             upper  = lower + size             # is obs's corner within FOV
             in_FOV = lambda obs: obs >= x_pos and obs <= x_pos + self.FOV
 
             if (in_FOV(lower) or in_FOV(upper)):   # FOV partly sees obstacle
                 self.local_obs.insert((lower, size), (lower_y[i], size_y[i]))
-                # add unchanged vals ((  x_items  ), (       y_items       ))
     
 
     def update_state(self, acc_x, acc_y):
+        pos_x, pos_y, vel_x, vel_y = self.state
+        t = self.TIME
+
         for i in range(4):               # write curr/start state
             self.state_traj[i].append(self.state[i])
 
         self.input_traj[0].append(acc_x) # write given input vals
         self.input_traj[1].append(acc_y) # arr[0] = x, arr[1] = y
-
-        t = self.TIME
-        pos_x, pos_y, vel_x, vel_y = self.state   # unpack state -> 4 vars
 
         pos_x += vel_x * t + (0.5 * acc_x * t ** 2)
         pos_y += vel_y * t + (0.5 * acc_y * t ** 2)
@@ -188,7 +179,7 @@ class Robot:
         print(f"\nDEBUG: update_state() done = {[round(x, 2) for x in self.state]}")
 
 
-def motion_planning(world, robot, relaxed, N=25):
+def motion_planning(world, robot, relaxed, horizon=None):
     """
     Inputs:
     obs_size:   2 x num_obs array, describing width and height of the obstacles, num_obs = # of obstacles
@@ -221,7 +212,8 @@ def motion_planning(world, robot, relaxed, N=25):
 #### Robot constraints ####
     Q = 100 * np.identity(dim_state)
     R = 50  * np.identity(dim_input)
-    
+    N = 25  # default horizon
+
 ## Vars & Parameters
     # Declare variables for state and input trajectories
     state = cp.Variable((dim_state, N + 1)) # STATE IS X
@@ -300,105 +292,9 @@ def motion_planning(world, robot, relaxed, N=25):
     # Define the motion planning problem
     problem = cp.Problem(cp.Minimize(objective), constraints)
 
-    print(f"\nDEBUG: motion_planning() done. return problem, vars, params")
+    print(f"\nDEBUG: motion_planning() done. return problem, vars, param")
 
     if relaxed:
         return problem, (state, input), (bool_low, bool_upp, state0, goal0, lower_obs, upper_obs)
     else:
         return problem, (state, input, bool_low, bool_upp), (state0, goal0, lower_obs, upper_obs)
-
-
-def run_simulations(num_iters, plot_sol):
-    # Create the motion planning problem
-
-    lower_arr = [[ 0.5, 1.7, 2.7, 2.7, 3.8], # x coords
-                 [-0.3,-0.7,-1.3, 0.3,-0.5]] # y coords
-    
-    size_arr  = [[0.7, 0.5, 0.5, 0.5, 0.7],  # width: x
-                 [1.0, 0.7, 1.0, 1.0, 1.0]]  # height:y
-    
-    limit = [[0.0,-1.2,-0.7,-0.7], # lower[pos_x, pos_y,
-             [5.0, 1.2, 0.7, 0.7]] # upper vel_x, vel_y]
-    goal  =  [5.0, 0.0, 0.0, 0.0]
-    
-    world_obs = ObsMap(lower_arr, size_arr)
-    world = World(limit, goal, world_obs, TOL=0.2)
-
-    # Randomize start, get vars & params
-    for iter in range(1019, num_iters):
-
-        start = world.random_state(iters=100, bound=0.9)
-        robot = Robot(start, world_obs, TIME=0.1, FOV=1.5)
-
-        print(f"\nDEBUG: world.random_state() done: {[round(x, 2) for x in start]}")
-
-        problem, vars, params = motion_planning(world, robot, relaxed=False)
-
-        state , input, bool_low , bool_upp  = vars
-        state0, goal0, lower_obs, upper_obs = params
-
-        dist = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
-  
-
-        # Initialize all CP.parameter values
-        while dist(goal) > world.TOL:
-
-            print(f"DEBUG: abs(distance) to goal: {round(dist(goal), 2)}")
-
-            state0.value = np.array(robot.state)
-            goal0.value  = np.array(goal)
-
-            robot.detect_obs()
-            lower_cpy = copy.deepcopy(robot.local_obs.lower_arr)
-            size_cpy  = copy.deepcopy(robot.local_obs.size_arr)
-
-            while len(lower_cpy[0]) < world.MAX:    # Ensure arr len = MAX
-                low = min(limit[0][0], limit[0][1]) # Get low within big-M
-                
-                for i in [0, 1]:             # Add fake obs to x(0) & y(1)
-                    lower_cpy[i].append(low) # Fake obs have lower x,y val
-                    size_cpy [i].append(0.0) # outside of world; size: 0.0
-
-            lower_obs.value = np.array(lower_cpy)
-            upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
-
-            # Now collect optimized trajectories
-            print(f"\nSolving iter = {iter}")
-            problem.solve(verbose=False)
-
-            print(f"Status = {problem.status}")
-            print(f"Optimal cost = {round(problem.value, 2)}")
-            print(f"Solve time = {round(problem.solver_stats.solve_time, 4)}s")
-
-
-            state_sol = state.value
-            input_sol = input.value
-
-            # Rounds values to X.0; returns list
-            arnd = lambda x: np.around(x.value, 1).tolist()
-
-            bl_sol, bu_sol = [], []
-            obs = [lower_cpy, size_cpy]
-
-            for i in range(world.MAX):
-                bl_sol.append(arnd(bool_low[i]))
-                bu_sol.append(arnd(bool_upp[i]))
-
-            world.solutions.append([robot.state, obs, bl_sol, bu_sol])
-
-            robot.update_state(input_sol[0][0], input_sol[1][0])
-            # 1st value in arr(    x_accel    ,    y_accel     )
-
-            if plot_sol:
-                world.plot_problem(state_sol, start, goal)
-
-        if plot_sol:
-            world.plot_problem(np.array(robot.state_traj), start, goal)
-
-        file = open(f"data/sol{iter}.pkl", "wb")
-        pickle.dump(world.solutions, file)
-        world.solutions = []
-
-
-if __name__ == "__main__":
-    run_simulations(num_iters=2000, plot_sol=False)

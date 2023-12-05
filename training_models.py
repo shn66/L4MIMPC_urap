@@ -1,13 +1,11 @@
 import os
 import re
-import copy
 import torch
 import random
 import pickle
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
-import motion_planning as mp
 import torch.nn.functional as fn
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 from torch.utils.tensorboard import SummaryWriter
@@ -22,13 +20,14 @@ OUTPUT = 500
 ITERS = 256
 BATCH = 1024
 LEARN = 0.001
-MODEL = "norms=0_drops=0_weigh=0_activ=leaky_relu.pth"
+L = OUTPUT // 2
 
 class Dataset:
-    # solutions.pkl = [[state, local_obs, bl_sol, bu_sol], ...]
+    # solutions.pkl = [[state, local_obs, bl_sol, bu_sol] ...]
 
     def __init__(self):
-        set, self.sols = "data/set.pkl", []
+        set = "data/set.pkl"
+        self.sols = []
 
         print("\nDEBUG: Dataset initializing.")
 
@@ -92,13 +91,10 @@ class BinaryNN(nn.Module):
         x = self.output(x)
         return self.activ(x)
 
-
-nums = lambda x: x.view(5, 2, 25).detach().numpy()   # Shape lst to multi-dim -> np.array
-tens = lambda x: torch.Tensor(x).view(-1)            # Shape lst to tensor -> flattens 1D
-outs = lambda arr, i: (nums(arr[:i]), nums(arr[i:])) # Computes bl_sol, bu_sol from model
+tens = lambda x: torch.Tensor(x).view(-1)
 
 def model_training(dataset, norms, drops, weigh, activ, optiv, model=None):
-    SIZE, LIM    = dataset.size, OUTPUT // 2
+    SIZE = dataset.size
 
     if not os.path.exists("models"):
         os.mkdir("models")
@@ -112,10 +108,10 @@ def model_training(dataset, norms, drops, weigh, activ, optiv, model=None):
     for i in range(SIZE):                # Sample sol @ index i
         state, obs_arr, bl_sol, bu_sol = dataset.sols[i]
 
-        data[i, :4] = tens(state)        # 4 items
-        data[i, 4:] = tens(obs_arr)      # 20 items
-        labels[i, :LIM] = tens(bl_sol)   # 250 items
-        labels[i, LIM:] = tens(bu_sol)   # 250 items
+        data  [i, :4] = tens(state)      # 4 items
+        data  [i, 4:] = tens(obs_arr)    # 20 items
+        labels[i, :L] = tens(bl_sol)     # 250 items
+        labels[i, L:] = tens(bu_sol)     # 250 items
 
     print(f"\nDEBUG: model_training() started. PATH =\n{PATH}")
 
@@ -215,15 +211,19 @@ def get_model_outs(dataset, path, state=[], obs_arr=[], model=None):
         state, obs_arr, bl_sol, bu_sol = dataset.sols[i]
 
     input = torch.cat((tens(state), tens(obs_arr)))
+    
     if norms:
         input = input.unsqueeze(0)   # Add batch dim->input
     
     with torch.no_grad():
         output = torch.sigmoid(model(input))
     
-    output = (output.view(-1) >= 0.5).float() # Remove batch dim, rounds to 0 or 1
+    output = (output.view(-1) >= 0.5).float()          # Remove batch dim, rounds to 0 or 1
 
-    return output, obs_arr, np.array(bl_sol), np.array(bu_sol)
+    nums = lambda x: x.view(5, 2, 25).detach().numpy() # Shape lst to multi-dim -> np.array
+    bl_out, bu_out = nums(output[:L]), nums(output[L:])
+    
+    return bl_out, bu_out, obs_arr, np.array(bl_sol), np.array(bu_sol)
 
 
 def test_neural_net(dataset, verbose):
@@ -236,8 +236,7 @@ def test_neural_net(dataset, verbose):
         diff_l, diff_u = 0.0, 0.0
 
         for _ in range(ITERS):
-            output, _, bl_sol, bu_sol = get_model_outs(dataset, path)
-            bl_out, bu_out = outs(output, OUTPUT // 2)
+            bl_out, bu_out, _, bl_sol, bu_sol = get_model_outs(dataset, path)
 
             diff_l += np.sum(bl_sol != bl_out) # Compares differences
             diff_u += np.sum(bu_sol != bu_out) # btwn output and data
@@ -251,8 +250,7 @@ def test_neural_net(dataset, verbose):
         print(f"bu_sol = {diff_u / ITERS}\ndiff_avg = {diff_avg}")
 
     if verbose:
-        output, obs_arr, bl_sol, bu_sol = get_model_outs(dataset, path_min)
-        bl_out, bu_out = outs(output, OUTPUT // 2)
+        bl_out, bu_out, obs_arr, bl_sol, bu_sol = get_model_outs(dataset, path_min)
 
         diff_l = np.where(bl_sol != bl_out, "X", ".") # Compares differences
         diff_u = np.where(bu_sol != bu_out, "X", ".") # X is wrong . is good
@@ -267,99 +265,11 @@ def test_neural_net(dataset, verbose):
     print(f"\nDEBUG: best model = {path_min}")
 
 
-def relaxed_problem(use_model):
-    # A MODIFIED motion planning problem
-
-    lower_arr = [[ 0.5, 1.7, 2.7, 2.7, 3.8], # x coords
-                 [-0.3,-0.7,-1.3, 0.3,-0.5]] # y coords
-    
-    size_arr  = [[0.7, 0.5, 0.5, 0.5, 0.7],  # width: x
-                 [1.0, 0.7, 1.0, 1.0, 1.0]]  # height:y
-    
-    limit = [[0.0,-1.2,-0.7,-0.7], # lower[pos_x, pos_y,
-             [5.0, 1.2, 0.7, 0.7]] # upper vel_x, vel_y]
-    goal  =  [5.0, 0.0, 0.0, 0.0]
-    
-    world_obs = mp.ObsMap(lower_arr, size_arr)
-    world = mp.World(limit, goal, world_obs, TOL=0.2)
-
-    # Randomize start, get vars & params
-    if use_model:
-        start = world.random_state(iters=100, bound=0.9)
-    else:
-        i = random.randint(0, dataset.size - 1) # Random sol @ index i
-        start, obs_arr, bl_sol, bu_sol = dataset.sols[i]
-    
-    robot = mp.Robot(start, world_obs, TIME=0.1, FOV=1.5)
-    print(f"\nDEBUG: randomize start done: {[round(x, 2) for x in start]}")
-
-    problem, vars, params = mp.motion_planning(world, robot, relaxed=True)
-
-    state, input = vars
-    bool_low, bool_upp, state0, goal0, lower_obs, upper_obs = params
-
-
-    dist = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
-
-    # Initialize all CP.parameter values
-    while dist(goal) > world.TOL:
-
-        print(f"DEBUG: abs(distance) to goal: {round(dist(goal), 2)}")
-        
-        state0.value = np.array(robot.state)
-        goal0.value  = np.array(goal)
-
-        if use_model:
-            robot.detect_obs()
-
-            lower_cpy = copy.deepcopy(robot.local_obs.lower_arr)
-            size_cpy  = copy.deepcopy(robot.local_obs.size_arr)
-
-            while len(lower_cpy[0]) < world.MAX:    # Ensure arr len = MAX
-                low = min(limit[0][0], limit[0][1]) # Get low within big-M
-                
-                for i in [0, 1]:             # Add fake obs to x(0) & y(1)
-                    lower_cpy[i].append(low) # Fake obs have lower x,y val
-                    size_cpy [i].append(0.0) # outside of world; size: 0.0
-        else:
-            lower_cpy = obs_arr[0]
-            size_cpy  = obs_arr[1]
-
-        lower_obs.value = np.array(lower_cpy)
-        upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
-
-
-        if use_model:
-            output, _, bl_sol, bu_sol = get_model_outs(
-                dataset, MODEL, robot.state, [lower_cpy, size_cpy])
-            
-            bl_sol, bu_sol = outs(output, OUTPUT // 2)
-
-        ## CP.PROBLEM STUFF ##
-
-        for i in range(world.MAX):
-            bool_low[i].value = np.array(bl_sol[i])
-            bool_upp[i].value = np.array(bu_sol[i])
-
-        problem.solve(verbose=False)
-        print(f"Status = {problem.status}")
-
-        print(f"Optimal cost = {round(problem.value, 2)}")
-        print(f"Solve time = {round(problem.solver_stats.solve_time, 4)}s")
-
-        state_sol = state.value
-        input_sol = input.value
-        
-        robot.update_state(input_sol[0][0], input_sol[1][0])
-        # 1st value in arr(    x_accel    ,    y_accel     )
-        world.plot_problem(state_sol, start, goal)
-
-
 if __name__ == "__main__":
     dataset = Dataset()
-    TEST = False
+    TRAIN = False
     
-    if TEST:
-        test_neural_net(dataset, verbose=True)
+    if TRAIN:
+        model_training(dataset, False, False, False, fn.leaky_relu, optim.Adam)
     else:
-        relaxed_problem(use_model=True)
+        test_neural_net(dataset, verbose=True)
