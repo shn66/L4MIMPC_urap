@@ -91,7 +91,8 @@ def problem_solving(num_iters, plot_sol):
 def relaxed_problem(dataset, use_model):
     # Randomize start, get vars & params
     if use_model:
-        start = world.random_state(iters=100, bound=0.1)
+        # start = world.random_state(iters=100, bound=0.1)
+        start = [0.4, -0.7, 0.0, 0.0]
     else:
         i = random.randint(0, dataset.size - 1) # Random sol @ index i
         start, obs_arr, bl_sol, bu_sol = dataset.sols[i]
@@ -148,7 +149,7 @@ def relaxed_problem(dataset, use_model):
 
         state_sol, input_sol = state.value, input.value
 
-        if not state_sol or not input_sol:
+        if not isinstance(state_sol, np.ndarray):
             print("\nDEBUG: invalid solution. Solving backup problem")
 
             B_problem, B_vars, B_params = mp.motion_planning(world, robot, relaxed=False, horizon=5)
