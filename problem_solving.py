@@ -6,7 +6,7 @@ import motion_planning as mp
 import training_models as tm
 from datetime import datetime
 
-MODEL = "REF_ALL_norms=0_drops=0_weigh=0_activ=leaky_relu.pth"
+MODEL = "REF_ALL_0_0_0=leaky_relu.pth"
 
 lower_arr = [[ 0.5, 1.7, 2.7, 2.7, 3.8], # x coords
              [-0.3,-0.7,-1.3, 0.3,-0.5]] # y coords
