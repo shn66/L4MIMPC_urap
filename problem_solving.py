@@ -6,7 +6,7 @@ import motion_planning as mp
 import training_models as tm
 from datetime import datetime
 
-MODEL = "BEST_norms=0_drops=0_weigh=0_activ=leaky_relu.pth"
+MODEL = "REF_ALL_norms=0_drops=0_weigh=0_activ=leaky_relu.pth"
 
 lower_arr = [[ 0.5, 1.7, 2.7, 2.7, 3.8], # x coords
              [-0.3,-0.7,-1.3, 0.3,-0.5]] # y coords
@@ -215,7 +215,7 @@ def relaxed_problem(dataset, use_model, do_dagger=False):
 if __name__ == "__main__":
     dataset = tm.Dataset()
     SOLVE = False
-    DAGGER = True
+    DAGGER = False
     DAGGER_ITERS=100
     
     if SOLVE:
@@ -224,5 +224,3 @@ if __name__ == "__main__":
         num_iters = DAGGER_ITERS if DAGGER else 1
         for i in range(num_iters):
             relaxed_problem(dataset, use_model=True, do_dagger=DAGGER)
-
-        

@@ -26,15 +26,9 @@ class Dataset:
     # solutions.pkl = [[state, local_obs, bl_sol, bu_sol] ...]
 
     def __init__(self, dagger=False):
-        set = "data/set.pkl"
+        print("\nDEBUG: Dataset initializing.")
         self.sols = []
 
-        print("\nDEBUG: Dataset initializing.")
-
-        # if os.path.exists(set):
-        #     file = open(set, "rb")
-        #     self.sols = pickle.load(file)
-        # else:
         rule = "sol_dagger" if dagger else "sol"
         data = [x for x in os.listdir("data") if x.startswith(rule)]
 
@@ -42,9 +36,6 @@ class Dataset:
             file = open(f"data/{path}", "rb")
             self.sols += pickle.load(file)
 
-        # file = open(set, "wb")
-        # pickle.dump(self.sols, file)
-        
         self.size = len(self.sols)
         print(f"DEBUG: Dataset initialized. {self.size} datapoints read.")
 
@@ -94,14 +85,14 @@ class BinaryNN(nn.Module):
 
 tens = lambda x: torch.Tensor(x).view(-1)
 
-def model_training(dataset, norms, drops, weigh, activ, optiv, model=None, info=""):
+def model_training(dataset, norms, drops, weigh, activ, optiv, model=None):
     SIZE = dataset.size
 
     if not os.path.exists("models"):
         os.mkdir("models")
 
     activ_str = str(activ).split(" ")[1]
-    PATH = f"models/{info}_norms={int(norms)}_drops={int(drops)}_weigh={int(weigh)}_activ={activ_str}.pth"
+    PATH = f"models/{int(norms)}_{int(drops)}_{int(weigh)}={activ_str}.pth"
     
     data   = torch.zeros((SIZE, INPUTS)) # Inputs = 24 (state, obs_arrs)
     labels = torch.zeros((SIZE, OUTPUT)) # Output = 500 (bl_sol, bu_sol)
@@ -259,7 +250,7 @@ def test_neural_net(dataset, verbose):
         lower_x, lower_y = obs_arr[0][0], obs_arr[0][1]
         size_x , size_y  = obs_arr[1][0], obs_arr[1][1]
 
-        for i in range(5):
+        for i in range(len(obs_arr[0])):
             print(f"\nobs at ({lower_x[i]}, {lower_y[i]}), size ({size_x[i]}, {size_y[i]}):")
             print(f"\ndiff_l =\n{diff_l[i]}\ndiff_u =\n{diff_u[i]}")
     
@@ -268,43 +259,9 @@ def test_neural_net(dataset, verbose):
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN = True
+    TRAIN = False
     
     if TRAIN:
-        norms, drops, weigh = False, False, False
-
-        # Original, all data
-        model = BinaryNN(norms, drops, fn.leaky_relu)
-        load  = torch.load(f"old_models/norms=0_drops=0_weigh=0_activ=leaky_relu.pth")
-        model.load_state_dict(load)
-
-        model_training(dataset, norms, drops, weigh, fn.leaky_relu, optim.Adam, model=model, info="ORI_ALL")
-
-        # Refined, all data
-        model = BinaryNN(norms, drops, fn.leaky_relu)
-        load  = torch.load(f"old_models/REFINED_norms=0_drops=0_weigh=0_activ=leaky_relu.pth")
-        model.load_state_dict(load)
-
-        model_training(dataset, norms, drops, weigh, fn.leaky_relu, optim.Adam, model=model, info="REF_ALL")
-
-        # Only use new data
-        dataset = Dataset(dagger=True)
-
-        # Original, new data
-        model = BinaryNN(norms, drops, fn.leaky_relu)
-        load  = torch.load(f"old_models/norms=0_drops=0_weigh=0_activ=leaky_relu.pth")
-        model.load_state_dict(load)
-
-        model_training(dataset, norms, drops, weigh, fn.leaky_relu, optim.Adam, model=model, info="ORI_NEW")
-
-        # Refined, all data
-        model = BinaryNN(norms, drops, fn.leaky_relu)
-        load  = torch.load(f"old_models/REFINED_norms=0_drops=0_weigh=0_activ=leaky_relu.pth")
-        model.load_state_dict(load)
-
-        model_training(dataset, norms, drops, weigh, fn.leaky_relu, optim.Adam, model=model, info="REF_NEW")
-
-        # train from scratch
-        model_training(dataset, norms, drops, weigh, fn.leaky_relu, optim.Adam, info="ONLYNEW")
+        model_training(dataset, False, False, False, fn.leaky_relu, optim.Adam)
     else:
         test_neural_net(dataset, verbose=True)

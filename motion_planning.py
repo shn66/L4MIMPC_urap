@@ -38,10 +38,8 @@ class ObsMap:
         found = False 
         
         for i in range(len(self)): # check all 4 vals at index i
-            if (lower_x == self.lower_arr[0][i] and
-                lower_y == self.lower_arr[1][i] and
-                size_x  == self.size_arr [0][i] and
-                size_y  == self.size_arr [1][i]):
+            if (lower_x == self.lower_arr[0][i] and lower_y == self.lower_arr[1][i] and
+                size_x  == self.size_arr [0][i] and size_y  == self.size_arr [1][i]):
                 found = True
 
         if not found: # append all 4 vals to arrays
