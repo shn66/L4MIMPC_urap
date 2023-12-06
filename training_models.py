@@ -25,25 +25,26 @@ L = OUTPUT // 2
 class Dataset:
     # solutions.pkl = [[state, local_obs, bl_sol, bu_sol] ...]
 
-    def __init__(self):
+    def __init__(self, dagger=False):
         set = "data/set.pkl"
         self.sols = []
 
         print("\nDEBUG: Dataset initializing.")
 
-        if os.path.exists(set):
-            file = open(set, "rb")
-            self.sols = pickle.load(file)
-        else:
-            data = [x for x in os.listdir("data") if x.startswith("sol")]
+        # if os.path.exists(set):
+        #     file = open(set, "rb")
+        #     self.sols = pickle.load(file)
+        # else:
+        rule = "sol_dagger" if dagger else "sol"
+        data = [x for x in os.listdir("data") if x.startswith(rule)]
 
-            for i in range(len(data)):
-                file = open(f"data/sol{i}.pkl", "rb")
-                self.sols += pickle.load(file)
+        for i in range(len(data)):
+            file = open(f"data/sol{i}.pkl", "rb")
+            self.sols += pickle.load(file)
 
-            file = open(set, "wb")
-            pickle.dump(self.sols, file)
-            
+        file = open(set, "wb")
+        pickle.dump(self.sols, file)
+        
         self.size = len(self.sols)
         print(f"DEBUG: Dataset initialized. {self.size} datapoints read.")
 
@@ -93,14 +94,14 @@ class BinaryNN(nn.Module):
 
 tens = lambda x: torch.Tensor(x).view(-1)
 
-def model_training(dataset, norms, drops, weigh, activ, optiv, model=None):
+def model_training(dataset, norms, drops, weigh, activ, optiv, model=None, info=""):
     SIZE = dataset.size
 
     if not os.path.exists("models"):
         os.mkdir("models")
 
     activ_str = str(activ).split(" ")[1]
-    PATH = f"models/norms={int(norms)}_drops={int(drops)}_weigh={int(weigh)}_activ={activ_str}.pth"
+    PATH = f"models/{info}_norms={int(norms)}_drops={int(drops)}_weigh={int(weigh)}_activ={activ_str}.pth"
     
     data   = torch.zeros((SIZE, INPUTS)) # Inputs = 24 (state, obs_arrs)
     labels = torch.zeros((SIZE, OUTPUT)) # Output = 500 (bl_sol, bu_sol)
@@ -267,9 +268,43 @@ def test_neural_net(dataset, verbose):
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN = False
+    TRAIN = True
     
     if TRAIN:
-        model_training(dataset, False, False, False, fn.leaky_relu, optim.Adam)
+        norms, drops, weigh = False, False, False
+
+        # Original, all data
+        model = BinaryNN(norms, drops, fn.leaky_relu)
+        load  = torch.load(f"old_models/norms=0_drops=0_weigh=0_activ=leaky_relu.pth")
+        model.load_state_dict(load)
+
+        model_training(dataset, norms, drops, weigh, fn.leaky_relu, optim.Adam, model=model, info="ORI_ALL")
+
+        # Refined, all data
+        model = BinaryNN(norms, drops, fn.leaky_relu)
+        load  = torch.load(f"old_models/REFINED_norms=0_drops=0_weigh=0_activ=leaky_relu.pth")
+        model.load_state_dict(load)
+
+        model_training(dataset, norms, drops, weigh, fn.leaky_relu, optim.Adam, model=model, info="REF_ALL")
+
+        # Only use new data
+        dataset = Dataset(dagger=True)
+
+        # Original, new data
+        model = BinaryNN(norms, drops, fn.leaky_relu)
+        load  = torch.load(f"old_models/norms=0_drops=0_weigh=0_activ=leaky_relu.pth")
+        model.load_state_dict(load)
+
+        model_training(dataset, norms, drops, weigh, fn.leaky_relu, optim.Adam, model=model, info="ORI_NEW")
+
+        # Refined, all data
+        model = BinaryNN(norms, drops, fn.leaky_relu)
+        load  = torch.load(f"old_models/REFINED_norms=0_drops=0_weigh=0_activ=leaky_relu.pth")
+        model.load_state_dict(load)
+
+        model_training(dataset, norms, drops, weigh, fn.leaky_relu, optim.Adam, model=model, info="REF_NEW")
+
+        # train from scratch
+        model_training(dataset, norms, drops, weigh, fn.leaky_relu, optim.Adam, info="ONLYNEW")
     else:
         test_neural_net(dataset, verbose=True)
