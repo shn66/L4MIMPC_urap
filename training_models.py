@@ -38,12 +38,12 @@ class Dataset:
         rule = "sol_dagger" if dagger else "sol"
         data = [x for x in os.listdir("data") if x.startswith(rule)]
 
-        for i in range(len(data)):
-            file = open(f"data/sol{i}.pkl", "rb")
+        for path in data:
+            file = open(f"data/{path}", "rb")
             self.sols += pickle.load(file)
 
-        file = open(set, "wb")
-        pickle.dump(self.sols, file)
+        # file = open(set, "wb")
+        # pickle.dump(self.sols, file)
         
         self.size = len(self.sols)
         print(f"DEBUG: Dataset initialized. {self.size} datapoints read.")
