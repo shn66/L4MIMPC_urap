@@ -173,17 +173,18 @@ def relaxed_problem(dataset, use_model, do_dagger=False):
 
             B_problem.solve(verbose=False)
             state_sol, input_sol = B_state.value, B_input.value
+
             if do_dagger:
                 print("\nDEBUG: Doing data aggregation")
                 f_state0.value = np.array(robot.state)
                 f_goal0.value  = np.array(goal)
                 f_lower_obs.value = np.array(lower_cpy)
                 f_upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
+
                 full_problem.solve(verbose=False)
                 print(f"Status = {full_problem.status}")
                 print(f"Optimal cost = {round(full_problem.value, 2)}")
                 print(f"Solve time = {round(full_problem.solver_stats.solve_time, 4)}s")
-
                 
                 arnd = lambda x: np.around(x.value, 1).tolist() # Rounds values to X.0
                 bl_sol, bu_sol = [], []
@@ -197,30 +198,21 @@ def relaxed_problem(dataset, use_model, do_dagger=False):
                 if abs(dist(goal)-prev_dist)<1e-5:             # If the robot is stuck, use full solution
                     state_sol, input_sol = f_state.value, f_input.value
 
-
         robot.update_state(input_sol[0][0], input_sol[1][0])
-        if not do_dagger:
-            world.plot_problem(state_sol, start, goal)
+        world.plot_problem(state_sol, start, goal)
         
-    
-
-    
-    if do_dagger:
-        day_time=datetime.now().strftime("%m_%d-%I-%M-%S")
-        file = open(f"data/sol_dagger_{day_time}.pkl", "wb")
-        pickle.dump(world.solutions, file)
-        world.solutions = []
+    # if do_dagger:
+    #     day_time=datetime.now().strftime("%m_%d-%I-%M-%S")
+    #     file = open(f"data/sol_dagger_{day_time}.pkl", "wb")
+    #     pickle.dump(world.solutions, file)
+    #     world.solutions = []
 
 
 if __name__ == "__main__":
     dataset = tm.Dataset()
     SOLVE = False
-    DAGGER = False
-    DAGGER_ITERS=100
     
     if SOLVE:
         problem_solving(num_iters=0, plot_sol=False)
     else:
-        num_iters = DAGGER_ITERS if DAGGER else 1
-        for i in range(num_iters):
-            relaxed_problem(dataset, use_model=True, do_dagger=DAGGER)
+        relaxed_problem(dataset, use_model=True, do_dagger=False)
