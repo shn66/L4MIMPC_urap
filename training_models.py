@@ -259,7 +259,7 @@ def test_model_diff(dataset, verbose):
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN = False
+    TRAIN = True
     
     if TRAIN:
         model_training(dataset, False, False, False, fn.leaky_relu, optim.Adam)
