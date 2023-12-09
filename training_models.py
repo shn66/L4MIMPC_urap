@@ -218,7 +218,7 @@ def get_model_outs(dataset, path, state=[], obs_arr=[], model=None):
     return bl_out, bu_out, obs_arr, np.array(bl_sol), np.array(bu_sol)
 
 
-def test_neural_net(dataset, verbose):
+def test_model_diff(dataset, verbose):
     path_min, diff_min = "", float("inf")
 
     folder = sorted(os.listdir("models"))       # Same path/types only
@@ -264,4 +264,4 @@ if __name__ == "__main__":
     if TRAIN:
         model_training(dataset, False, False, False, fn.leaky_relu, optim.Adam)
     else:
-        test_neural_net(dataset, verbose=True)
+        test_model_diff(dataset, verbose=True)
