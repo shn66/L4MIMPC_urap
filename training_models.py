@@ -85,14 +85,17 @@ class BinaryNN(nn.Module):
 
 tens = lambda x: torch.Tensor(x).view(-1)
 
-def model_training(dataset, norms, drops, weigh, activ, optiv, model=None):
+def model_training(dataset, norms, drops, weigh, activ, optiv, model=None, in_str=None):
     SIZE = dataset.size
 
     if not os.path.exists("models"):
         os.mkdir("models")
 
     activ_str = str(activ).split(" ")[1]
-    PATH = f"models/{int(norms)}_{int(drops)}_{int(weigh)}={activ_str}.pth"
+    if not in_str:
+        PATH = f"models/{int(norms)}_{int(drops)}_{int(weigh)}={activ_str}.pth"
+    else:
+        PATH = f"models/{in_str}.pth"
     
     data   = torch.zeros((SIZE, INPUTS)) # Inputs = 24 (state, obs_arrs)
     labels = torch.zeros((SIZE, OUTPUT)) # Output = 500 (bl_sol, bu_sol)
@@ -262,6 +265,17 @@ if __name__ == "__main__":
     TRAIN = True
     
     if TRAIN:
-        model_training(dataset, False, False, False, fn.leaky_relu, optim.Adam)
+        for norms in [True, False]:
+            for drops in [True, False]:
+                for weigh in [True, False]:
+                    model_training(dataset, norms, drops, weigh, fn.leaky_relu, optim.Adam)
+
+        for layers in [6, 16]:
+            for hidden in [64, 256]:
+                for batch in [512, 2048]:
+
+                    in_str = f"{layers}_{hidden}_{batch}"
+                    LAYERS, HIDDEN, BATCH = layers, hidden, batch
+                    model_training(dataset, False, False, False, fn.leaky_relu, optim.Adam, in_str)
     else:
         test_model_diff(dataset, verbose=True)

@@ -287,7 +287,7 @@ class Problem:
                 
             prev_dist = self.dist(goal)
             # self.robot.update_state(input_sol[0][0], input_sol[1][0])
-            return state_sol, input_sol
+            return state_sol
 
 
 if __name__ == "__main__":
