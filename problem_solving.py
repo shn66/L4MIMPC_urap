@@ -10,10 +10,10 @@ TOL = 0.2
 LIM = 0.01
 ITERS = 100
 TIME = 0.1
-FOV = 1.5   # 256 * 1024 / 2 = 131072
+FOV = 1.5   # 256 * 1024 / 2 = 131072 # 130106
 D = 1e-5
 
-MODEL = ""
+MODEL = "1_0_1_8_512_2048=leaky_relu.pth"
 
 lower_arr = [[ 0.5, 1.7, 2.7, 2.7, 3.8], # x coords
              [-0.3,-0.7,-1.3, 0.3,-0.5]] # y coords
@@ -179,20 +179,23 @@ def dagger_problem(save_data, plot_sol):
                     bl_sol.append(arnd(f_bool_low[i]))
                     bu_sol.append(arnd(f_bool_upp[i]))   
         
-        prev_dist = dist(goal)
-        obs = [lower_cpy, size_cpy]
+            obs = [lower_cpy, size_cpy]
+            world.solutions.append([robot.state, obs, bl_sol, bu_sol])
 
-        world.solutions.append([robot.state, obs, bl_sol, bu_sol])
+        prev_dist = dist(goal)
         robot.update_state(input_sol[0][0], input_sol[1][0])
 
         if plot_sol:
             world.plot_problem(state_sol, start, goal)
         
     if save_data:
-        iter = len(os.listdir("data"))
-        file = open(f"data/sol_dagger_{iter}.pkl", "wb")
-        pickle.dump(world.solutions, file)
-        world.solutions = []
+        iter = len(os.listdir("dagger"))
+        if iter > 100:
+            exit()
+        else:
+            file = open(f"dagger/sol_dagger{iter}.pkl", "wb")
+            pickle.dump(world.solutions, file)
+            world.solutions = []
 
 
 class Problem:
@@ -295,6 +298,10 @@ if __name__ == "__main__":
     SOLVE = True
     
     if SOLVE:
-        data_collection(num_iters=2000, plot_sol=False)
+        data_collection(num_iters=1600, plot_sol=False)
     else:
-        dagger_problem(save_data=True, plot_sol=False)
+        i = 0
+        while True:
+            print(f"\cycle = {i}")
+            dagger_problem(save_data=True, plot_sol=False)
+            i += 1

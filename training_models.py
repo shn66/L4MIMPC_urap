@@ -1,5 +1,4 @@
-import os
-import re
+import os, re
 import torch
 import random
 import pickle
@@ -12,13 +11,13 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
-LAYERS = 10
-HIDDEN = 128
+LAYERS = 8
 INPUTS = 24
+HIDDEN = 512
 OUTPUT = 500
 
 ITERS = 256
-BATCH = 1024
+BATCH = 2048
 LEARN = 0.001
 L = OUTPUT // 2
 
@@ -85,7 +84,7 @@ class BinaryNN(nn.Module):
 
 tens = lambda x: torch.Tensor(x).view(-1)
 
-def model_training(dataset, norms, drops, weigh, activ, optiv, model=None, in_str=None):
+def model_training(dataset, norms, drops, weigh, activ, optiv, model=None, in_str=""):
     SIZE = dataset.size
 
     if not os.path.exists("models"):
@@ -184,7 +183,7 @@ def model_training(dataset, norms, drops, weigh, activ, optiv, model=None, in_st
 
 def get_model_outs(dataset, path, state=[], obs_arr=[], model=None):
 
-    nums = [int(x) for x in re.findall(r'\d+', path)]
+    nums = [int(x) for x in re.findall(r'\d+', f"models/{path}")]
     norms, drops = bool(nums[0]), bool(nums[1])       # Term 1,2 (int->bool)
 
     funct = path.split("=")[-1][:-4]  # Final value (string)
@@ -266,11 +265,6 @@ if __name__ == "__main__":
     TRAIN = False
 
     if TRAIN:
-        for layers in [4, 6, 8]:
-            for hidden in [256, 512]:
-                for batch in [2048, 4096]:
-
-                    LAYERS, HIDDEN, BATCH = layers, hidden, batch
-                    model_training(dataset, True, False, True, fn.leaky_relu, optim.Adam)
+        model_training(dataset, True, False, True, fn.leaky_relu, optim.Adam)
     else:
         test_model_diff(dataset, verbose=True)
