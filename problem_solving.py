@@ -1,6 +1,5 @@
 import os
 import copy
-import random
 import pickle
 import numpy as np
 import motion_planning as mp
@@ -10,10 +9,10 @@ TOL = 0.2
 LIM = 0.01
 ITERS = 100
 TIME = 0.1
-FOV = 1.5   # 256 * 1024 / 2 = 131072 # 130106
+FOV = 1.5
 D = 1e-5
 
-MODEL = "1_0_1_8_512_2048=leaky_relu.pth"
+MODEL = "basic_1_0_1_8_512_2048=leaky_relu.pth"
 
 lower_arr = [[ 0.5, 1.7, 2.7, 2.7, 3.8], # x coords
              [-0.3,-0.7,-1.3, 0.3,-0.5]] # y coords
@@ -93,7 +92,7 @@ def data_collection(num_iters, plot_sol):
         world.solutions = []
 
 
-def dagger_problem(save_data, plot_sol):
+def dagger_problem(num_iters, plot_sol):
     start = world.random_state(ITERS, LIM)
     robot = mp.Robot(start, world_obs, TIME, FOV)
     
@@ -112,7 +111,9 @@ def dagger_problem(save_data, plot_sol):
     f_state0 , f_goal0, f_lower_obs, f_upper_obs = f_params
 
     dist = lambda x: np.linalg.norm(np.array(robot.state) - np.array(x))
+
     prev_dist = float("inf")
+    save_data = False
 
     while dist(goal) > world.TOL:
         print(f"DEBUG: abs(distance) to goal: {round(dist(goal), 2)}")
@@ -148,8 +149,10 @@ def dagger_problem(save_data, plot_sol):
         print(f"Solve time = {round(problem.solver_stats.solve_time, 4)}s")
 
         state_sol, input_sol = state.value, input.value
+        stuck = abs(dist(goal) - prev_dist) < D
 
-        if not isinstance(state_sol, np.ndarray):
+        if not isinstance(state_sol, np.ndarray) or stuck:
+            save_data = True
             print("\nDEBUG: invalid solution. Solving the backup problem")
 
             B_state0.value    = np.array(robot.state)
@@ -161,7 +164,7 @@ def dagger_problem(save_data, plot_sol):
             B_problem.solve(verbose=False)
             state_sol, input_sol = B_state.value, B_input.value
         
-            if abs(dist(goal) - prev_dist) < D:
+            if stuck:
                 print("\nDEBUG: invalid again. Doing full dagger problem")
 
                 f_state0.value    = np.array(robot.state)
@@ -179,8 +182,8 @@ def dagger_problem(save_data, plot_sol):
                     bl_sol.append(arnd(f_bool_low[i]))
                     bu_sol.append(arnd(f_bool_upp[i]))   
         
-            obs = [lower_cpy, size_cpy]
-            world.solutions.append([robot.state, obs, bl_sol, bu_sol])
+        obs = [lower_cpy, size_cpy]
+        world.solutions.append([robot.state, obs, bl_sol, bu_sol])
 
         prev_dist = dist(goal)
         robot.update_state(input_sol[0][0], input_sol[1][0])
@@ -190,7 +193,7 @@ def dagger_problem(save_data, plot_sol):
         
     if save_data:
         iter = len(os.listdir("dagger"))
-        if iter > 100:
+        if iter > num_iters:
             exit()
         else:
             file = open(f"dagger/sol_dagger{iter}.pkl", "wb")
@@ -199,7 +202,7 @@ def dagger_problem(save_data, plot_sol):
 
 
 class Problem:
-
+    
     def __init__(self):
         self.start = world.random_state(ITERS, LIM)
         self.robot = mp.Robot(self.start, world_obs, TIME, FOV)
@@ -258,8 +261,9 @@ class Problem:
 
 
             state_sol, input_sol = self.state.value, self.input.value
+            stuck = abs(self.dist(goal) - prev_dist) < D
 
-            if not isinstance(state_sol, np.ndarray):
+            if not isinstance(state_sol, np.ndarray) or stuck:
                 print("\nDEBUG: invalid solution. Solving backup problem")
 
                 self.B_state0.value    = np.array(self.robot.state)
@@ -270,7 +274,7 @@ class Problem:
                 self.B_problem.solve(verbose=False)
                 state_sol, input_sol = self.B_state.value, self.B_input.value
 
-                if abs(self.dist(goal) - prev_dist) < D:
+                if stuck:
                     print("\nDEBUG: invalid again. Doing dagger problem:")
 
                     self.f_state0.value    = np.array(self.robot.state)
@@ -295,13 +299,12 @@ class Problem:
 
 if __name__ == "__main__":
     problem = Problem()
-    SOLVE = True
+    SOLVE, i = False, 0
     
     if SOLVE:
         data_collection(num_iters=1600, plot_sol=False)
     else:
-        i = 0
         while True:
-            print(f"\cycle = {i}")
-            dagger_problem(save_data=True, plot_sol=False)
+            print(f"\nCYCLE = {i}")
+            dagger_problem(num_iters=100, plot_sol=False)
             i += 1

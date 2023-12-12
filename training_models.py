@@ -1,4 +1,5 @@
-import os, re
+import os
+import re
 import torch
 import random
 import pickle
@@ -188,10 +189,6 @@ def get_model_outs(dataset, path, state=[], obs_arr=[], model=None):
 
     funct = path.split("=")[-1][:-4]  # Final value (string)
     activ = eval(f"fn.{funct}")       # TODO: fix hardcoding
-
-    if len(nums) > 3:
-       global LAYERS, HIDDEN, BATCH
-       LAYERS, HIDDEN, BATCH = nums[3], nums[4], nums[5]
     
     if not model:
         model = BinaryNN(norms, drops, activ)
