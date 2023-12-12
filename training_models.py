@@ -92,10 +92,7 @@ def model_training(dataset, norms, drops, weigh, activ, optiv, model=None, in_st
         os.mkdir("models")
 
     activ_str = str(activ).split(" ")[1]
-    if not in_str:
-        PATH = f"models/{int(norms)}_{int(drops)}_{int(weigh)}={activ_str}.pth"
-    else:
-        PATH = f"models/{in_str}.pth"
+    PATH = f"models/{int(norms)}_{int(drops)}_{int(weigh)}{in_str}={activ_str}.pth"
     
     data   = torch.zeros((SIZE, INPUTS)) # Inputs = 24 (state, obs_arrs)
     labels = torch.zeros((SIZE, OUTPUT)) # Output = 500 (bl_sol, bu_sol)
@@ -187,11 +184,15 @@ def model_training(dataset, norms, drops, weigh, activ, optiv, model=None, in_st
 
 def get_model_outs(dataset, path, state=[], obs_arr=[], model=None):
 
-    bools = [bool(int(x)) for x in re.findall(r'\d+', path)]
-    norms, drops = bools[0], bools[1] # Term 1,2 (int->bool)
+    nums = [int(x) for x in re.findall(r'\d+', path)]
+    norms, drops = bool(nums[0]), bool(nums[1])       # Term 1,2 (int->bool)
 
     funct = path.split("=")[-1][:-4]  # Final value (string)
     activ = eval(f"fn.{funct}")       # TODO: fix hardcoding
+
+    if len(nums) > 3:
+       global LAYERS, HIDDEN, BATCH
+       LAYERS, HIDDEN, BATCH = nums[3], nums[4], nums[5]
     
     if not model:
         model = BinaryNN(norms, drops, activ)
@@ -262,20 +263,14 @@ def test_model_diff(dataset, verbose):
 
 if __name__ == "__main__":
     dataset = Dataset()
-    TRAIN = True
-    
+    TRAIN = False
+
     if TRAIN:
-        for norms in [True, False]:
-            for drops in [True, False]:
-                for weigh in [True, False]:
-                    model_training(dataset, norms, drops, weigh, fn.leaky_relu, optim.Adam)
+        for layers in [4, 6, 8]:
+            for hidden in [256, 512]:
+                for batch in [2048, 4096]:
 
-        for layers in [6, 16]:
-            for hidden in [64, 256]:
-                for batch in [512, 2048]:
-
-                    in_str = f"{layers}_{hidden}_{batch}"
                     LAYERS, HIDDEN, BATCH = layers, hidden, batch
-                    model_training(dataset, False, False, False, fn.leaky_relu, optim.Adam, in_str)
+                    model_training(dataset, True, False, True, fn.leaky_relu, optim.Adam)
     else:
         test_model_diff(dataset, verbose=True)
