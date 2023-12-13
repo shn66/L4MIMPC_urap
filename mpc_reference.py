@@ -37,7 +37,7 @@ world_obs = mp.ObsMap(lower_arr, size_arr)
 world = mp.World(limit, goal, world_obs, TOL)
 
 
-class Problem:
+class MPC_Reference:
     
     def __init__(self, state = [0.,0.,0.,0.], model_path = MODEL):
         self.start = state
@@ -172,7 +172,7 @@ class Problem:
     
 
 if __name__ == "__main__":
-    problem = Problem()
+    problem = MPC_Reference()
 
 
     reached = False
