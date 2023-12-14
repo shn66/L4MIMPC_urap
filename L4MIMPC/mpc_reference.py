@@ -2,15 +2,15 @@ import os
 import copy
 import pickle
 import numpy as np
-import motion_planning as mp
-import training_models as tm
+import L4MIMPC.motion_planning as mp
+import L4MIMPC.training_models as tm
 import torch as th
 import torch.nn.functional as fn
 import re
 import os
 
 
-TOL = 0.2
+TOL = 1.0
 LIM = 0.01
 ITERS = 100
 TIME = 0.1
@@ -18,7 +18,8 @@ FOV = 1.5
 D = 1e-5
 
 dir =  os.path.dirname(__file__)
-MODEL = "dagger_1_0_1=leaky_relu.pth"
+# MODEL = "dagger_1_0_1=leaky_relu.pth"
+MODEL = "basic_1_0_1=leaky_relu.pth"
 model_path = os.path.join(dir, "models/"+MODEL)
 
 
@@ -29,7 +30,7 @@ lower_arr = [[ 0.5, 1.7, 2.7, 2.7, 3.8], # x coords
 size_arr  = [[0.7, 0.5, 0.5, 0.5, 0.7],  # width: x
              [1.0, 0.7, 1.0, 1.0, 1.0]]  # height:y
 
-limit = [[0.0,-1.2,-0.7,-0.7], # lower[pos_x, pos_y,
+limit = [[-1.0,-1.2,-0.7,-0.7], # lower[pos_x, pos_y,
          [5.0, 1.2, 0.7, 0.7]] # upper vel_x, vel_y]
 goal  =  [5.0, 0.0, 0.0, 0.0]
 
@@ -39,17 +40,18 @@ world = mp.World(limit, goal, world_obs, TOL)
 
 class MPC_Reference:
     
-    def __init__(self, state = [0.,0.,0.,0.], model_path = MODEL):
+    def __init__(self, state = [0.,0.,0.,0.], model_path = MODEL, print_method=print):
         self.start = state
         self.robot = mp.Robot(self.start, world_obs, TIME, FOV)
 
-        print(f"\nDEBUG: randomed start done: {[round(x, 2) for x in self.start]}")
+        self.print_method = print_method
+        # self.print_method(f"\nDEBUG: randomed start done: {[round(x, 2) for x in self.start]}")
 
         self.problem, self.vars, self.params = mp.motion_planning(world, self.robot, relaxed=True)
         self.state, self.input = self.vars
         self.bool_low, self.bool_upp , self.state0, self.goal0, self.lower_obs, self.upper_obs = self.params
 
-        self.B_problem, self.B_vars , self.B_params = mp.motion_planning(world, self.robot, relaxed=False, horizon=5)
+        self.B_problem, self.B_vars , self.B_params = mp.motion_planning(world, self.robot, relaxed=False, horizon=6)
         self.B_state  , self.B_input, _, _ = self.B_vars
         self.B_state0 , self.B_goal0, self.B_lower_obs, self.B_upper_obs = self.B_params
 
@@ -82,6 +84,9 @@ class MPC_Reference:
 
         self.prev_dist =10.0
 
+        self.reference = None
+        
+
 
     def eval_model(self, state, obs_arr):
         input = th.cat((self.tens(state), self.tens(obs_arr)))
@@ -98,13 +103,19 @@ class MPC_Reference:
         return bl_out, bu_out
         
 
+    def set_start(self, state):
+        self.start = state
+        self.robot.state = state
 
     def get_reference(self, robot_state=None):
 
         # while self.dist(goal) > world.TOL:
-        print(f"DEBUG: abs(distance) to goal: {round(self.dist(goal), 2)}")
+        # self.print_method(f"DEBUG: abs(distance) to goal: {round(self.dist(goal), 2)}")
+        # self.print_method(f"DEBUG: Robot state: {robot_state}")
+        if robot_state: self.robot.state=robot_state
         
         self.state0.value = np.array(robot_state) if robot_state else np.array(self.robot.state)
+
         self.goal0.value  = np.array(goal)
         self.robot.detect_obs()
 
@@ -128,46 +139,54 @@ class MPC_Reference:
             self.bool_upp[i].value = bu_sol[i]
 
         self.problem.solve(verbose=False)
-        print(f"Status = {self.problem.status}")
-        print(f"Optimal cost = {round(self.problem.value, 2)}")
-        print(f"Solve time = {round(self.problem.solver_stats.solve_time, 4)}s")
+        self.print_method(f"Status = {self.problem.status}")
+        self.print_method(f"Optimal cost = {round(self.problem.value, 2)}")
+        self.print_method(f"Solve time = {round(self.problem.solver_stats.solve_time, 4)}s")
 
 
         state_sol, input_sol = self.state.value, self.input.value
         stuck = abs(self.dist(goal) - self.prev_dist) < D
 
-        if not isinstance(state_sol, np.ndarray) or stuck:
-            print("\nDEBUG: invalid solution. Solving backup problem")
+        # self.print_method((state_sol, self.dist(goal), self.prev_dist))
 
-            self.B_state0.value    = np.array(self.robot.state)
-            self.B_goal0.value     = np.array(goal)
-            self.B_lower_obs.value = np.array(lower_cpy)
-            self.B_upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
+        # if not isinstance(state_sol, np.ndarray) or stuck:
+        # if state_sol is None or stuck:
+        #     # self.print_method("\nDEBUG: invalid solution. Solving backup problem")
 
-            self.B_problem.solve(verbose=False)
-            state_sol, input_sol = self.B_state.value, self.B_input.value
+        #     self.B_state0.value    = np.array(robot_state) if robot_state else np.array(self.robot.state)
+        #     self.B_goal0.value     = np.array(goal)
+        #     self.B_lower_obs.value = np.array(lower_cpy)
+        #     self.B_upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
 
-            if stuck:
-                print("\nDEBUG: invalid again. Solving full problem:")
+        #     self.B_problem.solve(verbose=False)
+        #     state_sol, input_sol = self.B_state.value, self.B_input.value
 
-                self.f_state0.value    = np.array(self.robot.state)
-                self.f_goal0.value     = np.array(goal)
-                self.f_lower_obs.value = np.array(lower_cpy)
-                self.f_upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
+            
 
-                self.f_problem.solve(verbose=False)
-                state_sol, input_sol = self.f_state.value, self.f_input.value
+        #     if stuck:
+        #         self.print_method("\nDEBUG: invalid again. Solving full problem:")
+
+        #         self.f_state0.value    = np.array(robot_state) if robot_state else np.array(self.robot.state)
+        #         self.f_goal0.value     = np.array(goal)
+        #         self.f_lower_obs.value = np.array(lower_cpy)
+        #         self.f_upper_obs.value = np.array(lower_cpy) + np.array(size_cpy)
+
+        #         self.f_problem.solve(verbose=False)
+        #         state_sol, input_sol = self.f_state.value, self.f_input.value
                 
-                arnd = lambda x: np.around(x.value, 1).tolist() # Rounds values to X.0
-                bl_sol, bu_sol = [], []
+        #         arnd = lambda x: np.around(x.value, 1).tolist() # Rounds values to X.0
+        #         bl_sol, bu_sol = [], []
                 
-                for i in range(world.MAX):
-                    bl_sol.append(arnd(self.f_bool_low[i]))
-                    bu_sol.append(arnd(self.f_bool_upp[i]))
+        #         for i in range(world.MAX):
+        #             bl_sol.append(arnd(self.f_bool_low[i]))
+        #             bu_sol.append(arnd(self.f_bool_upp[i]))
                 
         self.prev_dist = self.dist(goal)
         if not robot_state:
             self.robot.update_state(input_sol[0][0], input_sol[1][0])
+        
+        # if state_sol is not None:
+            
         return state_sol, self.prev_dist < world.TOL
     
 

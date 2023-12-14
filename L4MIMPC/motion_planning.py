@@ -238,8 +238,12 @@ def motion_planning(world, robot, relaxed, horizon=None):
     lower_x = lower_x[:, 0]      # resize arr shape from
     upper_x = upper_x[:, 0]      # (4, 1) to (4) idk why
 
-    lower_u = np.array([-1, -1]) # input u_t lies within
-    upper_u = np.array([ 1,  1]) # low_u <= u_t <= upp_u
+    if not horizon:
+        lower_u = np.array([-1, -1]) # input u_t lies within
+        upper_u = np.array([ 1,  1]) # low_u <= u_t <= upp_u
+    else:
+        lower_u = np.array([-5, -5]) # input u_t lies within
+        upper_u = np.array([ 5,  5]) # low_u <= u_t <= upp_u
 
 
 #### Obstacle avoidance ####

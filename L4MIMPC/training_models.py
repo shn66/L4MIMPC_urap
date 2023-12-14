@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as fn
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
@@ -132,8 +132,8 @@ def model_training(dataset, norms, drops, weigh, activ, optiv, model=None, in_st
     scheduler = ReduceLROnPlateau(optimizer) # Update LR
     best_loss = float("inf") # Keep best validation loss
 
-    writer = SummaryWriter("runs")
-    writer.add_text("PATH", PATH)
+    # writer = SummaryWriter("runs")
+    # writer.add_text("PATH", PATH)
 
     for i in range(ITERS):
         model.train()
@@ -169,16 +169,16 @@ def model_training(dataset, norms, drops, weigh, activ, optiv, model=None, in_st
         tl = train_loss / len(train_load)
         vl = valid_loss / len(valid_load)
 
-        writer.add_scalar("learn_rate", lr, i)
-        writer.add_scalar("train_loss", tl, i)
-        writer.add_scalar("valid_loss", vl, i)
+        # writer.add_scalar("learn_rate", lr, i)
+        # writer.add_scalar("train_loss", tl, i)
+        # writer.add_scalar("valid_loss", vl, i)
         
         print(f"\niter = {i + 1}/{ITERS}")
         print(f"learn_rate = {round(lr, 4)}")
         print(f"train_loss = {round(tl, 4)}")
         print(f"valid_loss = {round(vl, 4)}")
 
-    writer.close()
+    # writer.close()
     print("\nmodel_training() finished.")
 
 
