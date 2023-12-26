@@ -109,7 +109,7 @@ class World:
         size_arr  = self.world_obs.size_arr
 
         plt.gca().add_patch(Rectangle((0, -1.25), 5, 2.5, linewidth=1.0, 
-            ec="g", fc="w", label="boundary"))
+            ec="g", fc="w", alpha=0.2, label="boundary"))
     
         plt.plot(state_sol[0, :], state_sol[1, :], "o", label="path")
         plt.plot(start[0], start[1], "*", linewidth=10, label="start")
@@ -121,8 +121,7 @@ class World:
             plt.gca().add_patch(Rectangle((lower_arr[0][i], lower_arr[1][i]),
                 size_arr[0][i], size_arr[1][i], ec="r", fc="r", label=label))
             
-        plt.legend(loc=4)
-        plt.axis('equal')
+        plt.legend(loc = 4)
         plt.show()
 
 
@@ -180,7 +179,7 @@ class Robot:
         print(f"\nDEBUG: update_state() done = {[round(x, 2) for x in self.state]}")
 
 
-def motion_planning(world, robot, relaxed):
+def motion_planning(world, robot, relaxed, horizon=None):
     """
     Inputs:
     obs_size:   2 x num_obs array, describing width and height of the obstacles, num_obs = # of obstacles
@@ -213,7 +212,7 @@ def motion_planning(world, robot, relaxed):
 #### Robot constraints ####
     Q = 100 * np.identity(dim_state)
     R = 50  * np.identity(dim_input)
-    N = 25
+    N = 25 if not horizon else horizon
 
 ## Vars & Parameters
     # Declare variables for state and input trajectories
@@ -239,8 +238,12 @@ def motion_planning(world, robot, relaxed):
     lower_x = lower_x[:, 0]      # resize arr shape from
     upper_x = upper_x[:, 0]      # (4, 1) to (4) idk why
 
-    lower_u = np.array([-1, -1]) # input u_t lies within
-    upper_u = np.array([ 1,  1]) # low_u <= u_t <= upp_u
+    if not horizon:
+        lower_u = np.array([-1, -1]) # input u_t lies within
+        upper_u = np.array([ 1,  1]) # low_u <= u_t <= upp_u
+    else:
+        lower_u = np.array([-5, -5]) # input u_t lies within
+        upper_u = np.array([ 5,  5]) # low_u <= u_t <= upp_u
 
 
 #### Obstacle avoidance ####
