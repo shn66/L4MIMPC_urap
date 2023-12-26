@@ -109,7 +109,7 @@ class World:
         size_arr  = self.world_obs.size_arr
 
         plt.gca().add_patch(Rectangle((0, -1.25), 5, 2.5, linewidth=1.0, 
-            ec="g", fc="w", alpha=0.2, label="boundary"))
+            ec="g", fc="w", label="boundary"))
     
         plt.plot(state_sol[0, :], state_sol[1, :], "o", label="path")
         plt.plot(start[0], start[1], "*", linewidth=10, label="start")
@@ -121,7 +121,8 @@ class World:
             plt.gca().add_patch(Rectangle((lower_arr[0][i], lower_arr[1][i]),
                 size_arr[0][i], size_arr[1][i], ec="r", fc="r", label=label))
             
-        plt.legend(loc = 4)
+        plt.legend(loc=4)
+        plt.axis('equal')
         plt.show()
 
 
@@ -302,38 +303,3 @@ def motion_planning(world, robot, relaxed, horizon=None):
         return problem, (state, input), (bool_low, bool_upp, state0, goal0, lower_obs, upper_obs)
     else:
         return problem, (state, input, bool_low, bool_upp), (state0, goal0, lower_obs, upper_obs)
-    
-
-lower_arr = [[ 0.5, 1.7, 2.7, 2.7, 3.8], # x coords
-             [-0.3,-0.7,-1.3, 0.3,-0.5]] # y coords
-    
-size_arr  = [[0.7, 0.5, 0.5, 0.5, 0.7],  # width: x
-             [1.0, 0.7, 1.0, 1.0, 1.0]]  # height:y
-
-limit = [[-1.0,-1.2,-0.7,-0.7], # lower[pos_x, pos_y,
-         [5.0, 1.2, 0.7, 0.7]] # upper vel_x, vel_y]
-
-goal  = [5.0, 0.0, 0.0, 0.0]
-start = [0.0, 0.0, 0.0, 0.0]
-world_obs = ObsMap(lower_arr, size_arr)
-
-def test_plot(start, goal):
-        plt.gca().add_patch(Rectangle((0, -1.25), 5, 2.5, linewidth=1.0, 
-            ec="g", fc="w", alpha=0.2, label="boundary"))
-    
-        # plt.plot(state_sol[0, :], state_sol[1, :], "o", label="path")
-        plt.plot(start[0], start[1], "*", linewidth=10, label="start")
-        plt.plot(goal[0],  goal[1],  "*", linewidth=10, label="goal")
-
-        for i in range(len(world_obs)):
-            label = "obstacle" if i == 0 else ""
-
-            plt.gca().add_patch(Rectangle((lower_arr[0][i], lower_arr[1][i]),
-                size_arr[0][i], size_arr[1][i], ec="r", fc="r", label=label))
-            
-        plt.legend(loc = 4)
-        plt.axis('equal')
-        plt.show()
-
-if __name__ == "__main__":
-    test_plot(start, goal)
