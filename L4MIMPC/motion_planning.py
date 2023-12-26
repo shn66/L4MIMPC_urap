@@ -180,7 +180,7 @@ class Robot:
         print(f"\nDEBUG: update_state() done = {[round(x, 2) for x in self.state]}")
 
 
-def motion_planning(world, robot, relaxed, horizon=None):
+def motion_planning(world, robot, relaxed):
     """
     Inputs:
     obs_size:   2 x num_obs array, describing width and height of the obstacles, num_obs = # of obstacles
@@ -213,7 +213,7 @@ def motion_planning(world, robot, relaxed, horizon=None):
 #### Robot constraints ####
     Q = 100 * np.identity(dim_state)
     R = 50  * np.identity(dim_input)
-    N = 25 if not horizon else horizon
+    N = 25
 
 ## Vars & Parameters
     # Declare variables for state and input trajectories
@@ -239,12 +239,8 @@ def motion_planning(world, robot, relaxed, horizon=None):
     lower_x = lower_x[:, 0]      # resize arr shape from
     upper_x = upper_x[:, 0]      # (4, 1) to (4) idk why
 
-    if not horizon:
-        lower_u = np.array([-1, -1]) # input u_t lies within
-        upper_u = np.array([ 1,  1]) # low_u <= u_t <= upp_u
-    else:
-        lower_u = np.array([-5, -5]) # input u_t lies within
-        upper_u = np.array([ 5,  5]) # low_u <= u_t <= upp_u
+    lower_u = np.array([-1, -1]) # input u_t lies within
+    upper_u = np.array([ 1,  1]) # low_u <= u_t <= upp_u
 
 
 #### Obstacle avoidance ####
