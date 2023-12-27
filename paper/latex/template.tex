@@ -15,15 +15,16 @@
 
 %%% TITLE SECTION %%%
 
-\title{Leveraging Neural Networks for Efficient Obstacle\\Avoidance and Racing an Autonomous Car} % Article title, use manual lines breaks (\\) to beautify the layout
+\title{Leveraging Neural Networks for Efficient Obstacle\\Avoidance and Racing an Autonomous Car}
+% Article title, use manual lines breaks (\\) to beautify the layout
 
 % Authors are listed in a comma-separated list with superscript numbers indicating affiliations
 % \thanks{} is used for any text that should be placed in a footnote on the first page, such as the corresponding author's email, journal acceptance dates, a copyright/license notice, keywords, etc
 
 \author{Yanxiang Zhang, Chaarvi Goel, Siddharth H. Nair, Francesco Borrelli
-\thanks{\;Y. Zhang and C. Goel are with the Department of Electrical Engineering and Computer Sciences, S. H. Nair is with the Department of Mechanical Engineering, University of California, Berkeley, Berkeley, CA 94701, USA \texttt{\{joshzhang, chaarvigoel, siddharth\_nair, fborrelli\}@berkeley.edu}}
-}
-\date{}    % Keep this here idk why
+\thanks{\;Y. Zhang and C. Goel are with the Department of Electrical Engineering and Computer Sciences, S. H. Nair is with the Department of Mechanical Engineering, University of California, Berkeley, Berkeley, CA 94701, USA \texttt{\{joshzhang, chaarvigoel, siddharth\_nair, fborrelli\}@berkeley.edu}}}
+
+\date{}    % This prevents a bug idk
 \begin{document}
 \maketitle % Output the title section
 
@@ -51,144 +52,114 @@ This paper is organized as follows: In Section II we introduce the problem defin
 
 \quad Consider the following state and input vectors:
 \[x = [p_x, p_y, v_x, v_y], \quad u = [a_x, a_y]\]
-\noindent where \(Px, Py\) are the vehicle’s position and \(Vx, Vy\) are the vehicle’s velocity on the x and y axes. \(Ax, Ay\) are the vehicle’s acceleration inputs along their respective axes. For the purpose of computation, the vehicle is described by a point mass. For implementation on a physical car, the magnitudes of velocity and acceleration follow:
-\[
-\left| v_x \right|, \left| v_y \right| \leq \sqrt{0.5} \, \text{m/s}, \quad \left| a_x \right|, \left| a_y \right| \leq 1 \, \text{m/s}^2
-\]
-\quad The vehicle’s navigable environment is modeled by the first and fourth quadrants of a coordinate plane, where the origin is situated at the midpoint of the left “wall”. The environment is bounded by a height h in the y-direction and a width w in the (strictly positive) x-direction. For the purpose of physical implementation, we assume that \(h = 2.5\)m and \(w = 5.0\)m, and that the “goal” state the vehicle must reach from any random starting state is always \[x_{goal} = [5.0, 0.0, 0.0, 0.0].^\dagger\]
+
+\noindent where \(Px, Py\) are the vehicle’s position and \(Vx, Vy\) are the vehicle’s velocity on the x and y axes. \(Ax, Ay\) are the vehicle’s acceleration inputs along their respective axes. For the purpose of computation, the vehicle is described by a point mass. For implementation on a physical car, the magnitudes of the variables are constrained by:
+\[\left| v_x \right|, \left| v_y \right| \leq \sqrt{0.5} \, \text{m/s}, \quad \left| a_x \right|, \left| a_y \right| \leq 1 \, \text{m/s}^2\]
+
+The vehicle’s navigable environment is modeled by the first and fourth quadrants of a coordinate plane, where the origin is situated at the midpoint of the left “wall”. The environment is bounded by a height h in the y-direction and a width w in the (strictly positive) x-direction. For the purpose of physical implementation, we assume that \(h = 2.5\)m and \(w = 5.0\)m, and that the “goal” state the vehicle must reach from any random starting state is always
+\[x_{goal} = [5.0, 0.0, 0.0, 0.0].\]
 
 Within the environment lies a number of rectangular obstacles with random dimensions and positions. Each obstacle is modeled by a pair of tuples:
 \[obs_l = (l_x, l_y), \quad obs_s = (s_x, s_y).\]
+
 \(obs_l\) is the coordinates of the obstacle’s lower left-hand corner, and \(obs_s\) is the length of the obstacle along the x and y axes. For the purpose of this experiment, we assume a fixed number of obstacles (five), each with fixed dimensions and positions as shown in Figure 1.
 
 Each instance of the motion planning problem starts at timestep \(t=0\), where the vehicle is given a random starting state. \(Px, Py\) must lie inside the environment’s boundaries and outside any obstacles, and \(Vx = Vy\) = 0.0. For each discrete timestep \(t\) in
-\[
-0 \leq t < t_{end}, \quad \text{where}\; t_{end}\; \text{is when} \quad x[t_{end}] = x_{goal},
-\]
-the vehicle will scan up to a distance \(d\) in four cardinal directions and detect an obstacle if any edge lies within
-\[
-p_x \leq edge \leq p_x \pm d, \quad p_y \leq edge \leq p_y \pm d.
-\]
- For purposes of this experiment, we assume that \(d = 1.25^\dagger\)m and the difference \(\Delta\) between adjacent timesteps \(\Delta = t_1 - t_0 = 0.1^\dagger\)s.
+\[0 \leq t < t_{end}, \quad \text{where}\; t_{end}\; \text{is when} \quad x[t_{end}] = x_{goal},^\dagger\]
 
-\textit{\(^\dagger\)Side note: we selected 1.25m for \(d\) to simulate a limited range of visibility for obstacle detection. This range could be modeled as a radius; Section IV details an alternative approach that results in a more computationally efficient model. We selected 0.1s for \(\Delta\) to match the vehicle's response time to our input signal at each timestep. \(x[t_{end}] = x_{goal}\) was computed with a tolerance of 0.1.}
+\noindent the vehicle will scan up to a distance \(d\) in four cardinal directions and detect an obstacle if any edge lies within
+\[p_x \leq edge \leq p_x \pm d, \quad p_y \leq edge \leq p_y \pm d.\]
 
-\begin{figure} % Single column figure
+For purposes of this experiment, we assume that \(d = 1.25^\dagger\)m and the difference \(\Delta\) between adjacent timesteps \(\Delta = t_1 - t_0 = 0.1^\dagger\)s.
+
+\textit{\(^\dagger\)Side note: we selected 1.25m for \(d\) to simulate a limited range of visibility for obstacle detection. This range could be modeled as a radius; Section IV details an alternative approach that results in a more computationally efficient model. We selected 0.1s for \(\Delta\) to match the vehicle's response time to our input signal at each timestep. \(x[t_{end}] = x_{goal}\) was computed with a tolerance of 0.1 in total magnitude.}
+
+\begin{figure}
 	\includegraphics[width=\linewidth]{world.png}
 	\caption{Rendering of the vehicle's environment and obstacles.}
 \end{figure}
 
-\subsubsection{Motion Planning Problem.} \textit{State-Space Model}: The model is represented by state matrix \( A \) and input \( B \):
-\[
-A = \begin{bmatrix}
-1 & 0 & dt & 0 \\
-0 & 1 & 0 & dt \\
-0 & 0 & 1 & 0 \\
-0 & 0 & 0 & 1
-\end{bmatrix}
-\]
-\[
-B = dt \cdot \begin{bmatrix}
-0.5 \cdot dt & 0 \\
-0 & 0.5 \cdot dt \\
-1 & 0 \\
-0 & 1
-\end{bmatrix}
-\]
+\subsubsection{Motion Planning Problem.} This algorithm constitutes the computational runtime that our neural network seeks to minimize. We structured it as a convex optimization problem in Python using the \texttt{cvxpy} library. The problem is given input Parameters:
+\[x,\; x_{goal},\; obs\_lower,\; obs\_size\]
 
-\noindent \texttt{cvxpy} \textit{Variables and Parameters:}
-\begin{itemize}
-  \item State trajectory \texttt{state}: An array representing the state (position and velocity) of the robot over time.
-  \item Input trajectory \texttt{input}: An array representing the robot's input (acceleration) over time.
-  \item Initial state \texttt{state0} and goal state \texttt{goal0}: Parameters representing the start and target states.
-  \item Obstacle arrays \texttt{lower\_obs} and \texttt{upper\_obs}: Parameters for lower and upper corners of obstacles.
-\end{itemize}
+\noindent where the latter two are arrays of \(obs_l\) and \(obs_s\) tuples representing obstacles the vehicle has detected so far. The problem outputs Variables:
+\[x_{sol},\; u_{sol},\; b\_l_{sol},\; b\_u_{sol}\]
 
-\noindent \textit{Obstacle Constraints:} State and input constraints:
+\noindent which are the optimal state, input, and binary variables for obstacle avoidance that the algorithm solves for. The vehicle's dynamics are modeled by the state matrix \( A \) and input matrix \( B \):
+\begin{align*}
+    & A = \begin{bmatrix}
+        1 & 0 & dt & 0 \\
+        0 & 1 & 0 & dt \\
+        0 & 0 & 1 & 0  \\
+        0 & 0 & 0 & 1
+    \end{bmatrix}, \quad
+    B = dt \begin{bmatrix}
+        0.5 \cdot dt & 0 \\
+        0 & 0.5 \cdot dt \\
+        1 & 0 \\
+        0 & 1
+    \end{bmatrix} \\
+    & \text{where} \quad x[t+\Delta] = Ax[t] + Bu[t].
+\end{align*}
 
-\[
-\text{lower\_x} \leq \text{state}[:, k + 1] \leq \text{upper\_x}
-\]
-\[
-\text{lower\_u} \leq \text{input}[:, k] \leq \text{upper\_u}
-\]
-Obstacle avoidance constraints using big-M method:
-\[
-\text{state}[0:2, k + 1] \leq \text{lower\_obs}[:, i] + M \times \text{b\_low}[i][:, k]
-\]
-\[
-\text{state}[0:2, k + 1] \geq \text{upper\_obs}[:, i] - M \times \text{b\_upp}[i][:, k]
-\]
+Obstacle avoidance constraints are implemented using the Big-M method. For each obstacle, \(b\_l_{sol}\) and \(b\_u_{sol}\) are introduced, with the matrix \(M\) given by:
+\[M = \begin{bmatrix}
+2 \cdot max(a_x) & 0 \\
+0 & 2 \cdot max(a_y)
+\end{bmatrix}\]
 
-\noindent \textit{Objective Function:} The objective function is a sum of the weighted norms of the state deviation from the goal and the input trajectory, with an additional penalty for the terminal state:
-\begin{align}
-\sum_{k=0}^{N-1} &\left( \| Q \cdot (\text{state}[:, k] - \text{goal0}) \| \right. \left. + \| R \cdot \text{input}[:, k] \| \right) \nonumber \\
-& + 100 \cdot \| Q \cdot (\text{state}[:, N] - \text{goal0}) \| \nonumber
-\end{align}
-Here, \( Q \) and \( R \) are weight matrices for the state and input, respectively.
+For each obstacle \(i\), binary constraints are given by:
+\begin{align*}
+    & x[t+\Delta] \leq obs\_lower^{(i)} + M \times b\_l_{sol}^{(i)}[t], \\
+    & x[t+\Delta] \geq obs\_upper^{(i)} - M \times b\_u_{sol}^{(i)}[t], \\
+    & b\_l_{sol}^{(i)}[0, k] + b\_l_{sol}^{(i)}[1, k] + b\_u_{sol}^{(i)}[0, k] + b\_u_{sol}^{(i)}[1, k] < 4
+\end{align*}
 
-\noindent \textit{Dynamics and State Update Equation:}
-\[
-\text{state}[:, k + 1] = A \cdot \text{state}[:, k] + B \cdot \text{input}[:, k]
-\]
-This equation is used to propagate the state of the robot through time based on the current state and input.
+\noindent where \(obs\_upper\) is an array of tuples representing the upper right-hand corners of obstacles, formed by the element-wise addition of tuples in \(obs\_lower\) and \(obs\_size\). The last constraint ensures that the vehicle's position is not bounded by all four walls of an obstacle.
+
+Cost constraints are modeled by the state matrix \(Q\), input matrix \(R\), and horizon \(N\) (the number of timesteps \(\Delta\) to calculate starting from current time \(t\):
+\[Q = 100 \cdot I_{(4\times4)}, \quad R = 50 \cdot I_{(2\times2)}, \quad N = 25\]
+
+\noindent where the cost function \(J\) is a weighted sum of the deviation from the goal state and the control inputs:
+\[\sum_{k=0}^{N-1} \left( \| Q (x[t] - x_{goal}) \| + \| R u[t] \| \right) + p \| x[N] - x_{goal} \|\]
+
+\noindent where \(p\) is a large penalty on the terminal state \(x[N]\) to encourage approaching \(x_{goal}\).
+The problem is thus formulated as minimizing \(J\) subject to the above constraints for (\(t = 0, 1, \ldots, N-1\)). This definition allows for an efficient computation of the optimal trajectory, avoiding obstacles while minimizing the cost function.
 
 \section{III. PROPOSED METHODS}
-
-% \begin{table} % Single column table
-% 	\caption{Example single column table.}
-% 	\centering
-% 	\begin{tabular}{l l r}
-% 		\toprule
-% 		\multicolumn{2}{c}{Location} \\
-% 		\cmidrule(r){1-2}
-% 		East Distance & West Distance & Count \\
-% 		\midrule
-% 		100km & 200km & 422 \\
-% 		350km & 1000km & 1833 \\
-% 		600km & 1200km & 890 \\
-% 		\bottomrule
-% 	\end{tabular}
-% 	\label{tab:distcounts}
-% \end{table}
-
-% Referencing a table using its label: Table \ref{tab:distcounts}.
-
-% \begin{table*} % Full width table (notice the starred environment)
-% 	\caption{Example two column table with fixed-width columns.}
-% 	\centering % Horizontally center the table
-% 	\begin{tabular}{L{0.2\linewidth} L{0.2\linewidth} R{0.15\linewidth}} % Manually specify column alignments with L{}, R{} or C{} and widths as a fixed amount, usually as a proportion of \linewidth
-% 		\toprule
-% 		\multicolumn{2}{c}{Location} \\
-% 		\cmidrule(r){1-2}
-% 		East Distance & West Distance & Count \\
-% 		\midrule
-% 		100km & 200km & 422 \\
-% 		350km & 1000km & 1833 \\
-% 		600km & 1200km & 890 \\
-% 		\bottomrule
-% 	\end{tabular}
-% \end{table*}
 
 Aenean feugiat pellentesque venenatis. Sed faucibus tristique tortor vel ultrices. Donec consequat tellus sapien. Nam bibendum urna mauris, eget sagittis justo gravida vel. Mauris nisi lacus, malesuada sit amet neque ut, venenatis tempor orci. Curabitur feugiat sagittis molestie. Duis euismod arcu vitae quam scelerisque facilisis. Praesent volutpat eleifend tortor, in malesuada dui egestas id. Donec finibus ac risus sed pellentesque. Donec malesuada non magna nec feugiat. Mauris eget nibh nec orci congue porttitor vitae eu erat. Sed commodo ipsum ipsum, in elementum neque gravida euismod. Cras mi lacus, pulvinar ut sapien ut, rutrum sagittis dui. Donec non est a metus varius finibus. Pellentesque rutrum pellentesque ligula, vitae accumsan nulla hendrerit ut.
 
 Aenean porttitor eros non pharetra congue. Proin in odio in dolor luctus auctor ac et mi. Etiam euismod mi sed lectus fringilla pretium. Phasellus tristique maximus lectus et sodales. Mauris feugiat ligula quis semper luctus. Nam sit amet felis sed leo fermentum aliquet. Mauris arcu dui, posuere id sem eget, cursus pulvinar mi. Donec nec lacus non lectus fermentum scelerisque et at nibh. Sed tristique, metus ac vestibulum porta, tortor lectus placerat lorem, et convallis tellus dolor eget ante. Pellentesque dui ligula, hendrerit a purus et, volutpat tempor lectus. Mauris nec purus nec mauris rhoncus pellentesque. Quisque quis diam sed est lacinia congue. Donec magna est, hendrerit sed metus vel, accumsan rutrum nibh.
 
-% \begin{figure*} % Two column figure (notice the starred environment)
-% 	\includegraphics[width=\linewidth]{Fibroblastid.jpg}
-% 	\caption{Bovine pulmonary artery endothelial cells in culture. Blue: nuclei; red: mitochondria; green: microfilaments. Computer generated image from a 3D model based on a confocal laser scanning microscopy using fluorescent marker dyes. Source: Heiti Paves, \href{https://commons.wikimedia.org/wiki/File:Fibroblastid.jpg}{https://commons.wikimedia.org/wiki/File:Fibroblastid.jpg}.}
-% 	\label{fig:bpartery}
-% \end{figure*}
-
 Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Etiam cursus lectus purus, tempus iaculis quam dictum tristique. Nam interdum sapien nec tempor mattis. Quisque id sapien nisi. Mauris vehicula ornare eros vel efficitur. Nulla consectetur, turpis quis fringilla tincidunt, mi neque iaculis lectus, vel commodo elit odio non ex. Duis facilisis, purus ac viverra iaculis, turpis lectus ultrices ante, ac vestibulum ligula magna in libero. Etiam tristique maximus lacinia. Vestibulum hendrerit, lacus malesuada laoreet blandit, sapien velit sollicitudin nunc, eu porttitor urna ligula at lorem. Aliquam faucibus eros in fermentum venenatis. Fusce consectetur congue pellentesque. Suspendisse at nisi sit amet est porttitor cursus. Cras placerat faucibus nunc, a laoreet justo dignissim sit amet.
 
-This is a clickable URL link: \href{https://www.latextemplates.com}{LaTeX Templates}. This is a clickable email link: \href{mailto:vel@latextemplates.com}{vel@latextemplates.com}. This is a clickable monospaced URL link: \url{https://www.LaTeXTemplates.com}.
+Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Etiam cursus lectus purus, tempus iaculis quam dictum tristique. Nam interdum sapien nec tempor mattis. Quisque id sapien nisi. Mauris vehicula ornare eros vel efficitur. Nulla consectetur, turpis quis fringilla tincidunt, mi neque iaculis lectus, vel commodo elit odio non ex. Duis facilisis, purus ac viverra iaculis, turpis lectus ultrices ante, ac vestibulum ligula magna in libero. Etiam tristique maximus lacinia. Vestibulum hendrerit, lacus malesuada laoreet blandit, sapien velit sollicitudin nunc, eu porttitor urna ligula at lorem. Aliquam faucibus eros in fermentum venenatis. Fusce consectetur congue pellentesque. Suspendisse at nisi sit amet est porttitor cursus. Cras placerat faucibus nunc, a laoreet justo dignissim sit amet.
 
 %------------------------------------------------
 
 \section{IV. RESULTS \& ANALYSIS}
 
-This statement requires citation \autocite{Smith:2023qr}. This statement requires multiple citations \autocite{Smith:2023qr, Smith:2024jd}. This statement contains an in-text citation, for directly referring to a citation like so: \textcite{Smith:2024jd}.
+\begin{figure}
+	\includegraphics[width=\linewidth]{graph.png}
+	\caption{Solve times vs distance from origin for both methods.}
+\end{figure}
+
+\begin{table}
+    \caption{Comparison of metrics between naive and model methods.}
+    \centering
+    \begin{tabular}{l r r}
+        \toprule
+        Solve Time Metric & Naive Soln. & Model Soln. \\
+        \midrule
+        Minimum & 0.01844  & 0.003887 \\
+        Median  & 0.08775  & 0.005787 \\
+        Maximum & 2.2856   & 0.009929 \\
+        Average & 0.1868   & 0.005978 \\
+        Standard Deviation & 0.3277 & 0.000948 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
 Suspendisse potenti. Vivamus suscipit dapibus metus. Proin auctor iaculis ex, id fermentum lectus dapibus tristique. Nullam maximus eros eget leo pretium dapibus. Nunc in auctor erat, id interdum risus. Suspendisse aliquet vehicula accumsan. In vestibulum efficitur dictum. Sed ultrices, libero nec fringilla feugiat, elit massa auctor ligula, vehicula tempor ligula felis in lectus. Suspendisse sem dui, pharetra ut sodales eu, suscipit sit amet felis. Donec pretium viverra ante, ac pulvinar eros. Suspendisse gravida consectetur urna. Pellentesque vitae leo porta, imperdiet eros eget, posuere sem. Praesent eget leo efficitur odio bibendum condimentum sit amet vel ex. Nunc maximus quam orci, quis pulvinar nibh eleifend ac. Quisque consequat lacus magna, eu posuere tellus iaculis ac. Sed vitae tortor tincidunt ante sagittis iaculis.
 
