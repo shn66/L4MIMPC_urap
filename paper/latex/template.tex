@@ -30,7 +30,7 @@
 
 %%% ARTICLE CONTENTS %%%
 
-\textbf{\small\textit{Abstract}---In this paper we present a novel neural network model capable of predicting a large number of output dimensions from minimal input data. This research addresses the challenges in autonomous car technology, particularly in high-speed environments with limited visibility. The model, developed using PyTorch, demonstrates exceptional efficiency in path planning, reducing problem-solving time by a factor of 100 while maintaining over 95\% accuracy. This achievement sets a new benchmark for the application of neural networks in high-speed, real-time scenarios. The effectiveness of the proposed strategy is demonstrated by experimental results on the Berkeley Autonomous Race Car (BARC) platform.}
+\textbf{\small\textit{Abstract}---In this paper we present a novel neural network model capable of predicting a large number of output dimensions from minimal input data. This research addresses the challenges in autonomous car technology, particularly in high-speed environments with limited visibility. The model, developed using PyTorch, demonstrates exceptional efficiency in path planning, reducing problem-solving time by a factor of 30 while maintaining over 99\% accuracy. This achievement sets a new benchmark for the application of neural networks in high-speed, real-time scenarios. The effectiveness of the proposed strategy is demonstrated by experimental results on the Berkeley Autonomous Race Car (BARC) platform.}
 
 \section{I. INTRODUCTION}
 
@@ -42,7 +42,7 @@ In the realm of machine learning and autonomous vehicles, several approaches hav
 
 The primary objective of this paper is to demonstrate the feasibility of using a neural network model to accurately predict a large number of output dimensions from a relatively small number of input dimensions. Our focus is on a model that can process inputs consisting of the car’s position, velocity in the x and y directions, and obstacles detected within a limited field of vision. The goal is to train this model to predict 500 binary variables that are crucial for efficient and effective path planning in real-time racing scenarios.
 
-Our contribution to the field of machine learning and autonomous vehicles is significant. We have developed and trained a PyTorch model capable of performing binary classification of variables used in solving a convex optimization problem for path planning. This model stands out for its ability to reduce problem-solving time by a factor of 100 while maintaining an accuracy rate of over 95 percent. This achievement not only proves the feasibility of racing an autonomous car with efficient, on-the-fly obstacle avoidance but also sets a new benchmark in the application of neural networks in high-speed autonomous vehicle operations.
+Our contribution to the field of machine learning and autonomous vehicles is significant. We have developed and trained a PyTorch model capable of performing binary classification of variables used in solving a convex optimization problem for path planning. This model stands out for its ability to reduce problem-solving time by a factor of 30 while maintaining an accuracy rate of over 99 percent. This achievement not only proves the feasibility of racing an autonomous car with efficient, on-the-fly obstacle avoidance but also sets a new benchmark in the application of neural networks in high-speed autonomous vehicle operations.
 
 The novel aspect of our research lies in the unique application of neural networks to a highly specialized domain of autonomous racing. Our approach differs from existing methods by focusing on the prediction of a large number of output variables from limited input data, a challenge that has not been extensively explored in current research. This innovation opens up new possibilities for machine learning in areas where real-time data processing and decision-making are critical.
 
@@ -50,7 +50,7 @@ This paper is organized as follows: In Section II we introduce the problem defin
 
 \section{II. PROBLEM DEFINITION}
 
-\quad Consider the following state and input vectors:
+Consider the following state and input vectors:
 \[x = [p_x, p_y, v_x, v_y], \quad u = [a_x, a_y]\]
 
 \noindent where \(Px, Py\) are the vehicle’s position and \(Vx, Vy\) are the vehicle’s velocity on the x and y axes. \(Ax, Ay\) are the vehicle’s acceleration inputs along their respective axes. For the purpose of computation, the vehicle is described by a point mass. For implementation on a physical car, the magnitudes of the variables are constrained by:
@@ -108,7 +108,7 @@ Obstacle avoidance constraints are implemented using the Big-M method. For each 
 0 & 2 \cdot max(a_y)
 \end{bmatrix}\]
 
-For each obstacle \(i\), binary constraints are given by:
+\noindent For each obstacle \(i\), binary constraints are given by:
 \begin{align*}
     & x[t+\Delta] \leq obs\_lower^{(i)} + M \times b\_l_{sol}^{(i)}[t], \\
     & x[t+\Delta] \geq obs\_upper^{(i)} - M \times b\_u_{sol}^{(i)}[t], \\
@@ -120,33 +120,36 @@ For each obstacle \(i\), binary constraints are given by:
 Cost constraints are modeled by the state matrix \(Q\), input matrix \(R\), and horizon \(N\) (the number of timesteps \(\Delta\) to calculate starting from current time \(t\):
 \[Q = 100 \cdot I_{(4\times4)}, \quad R = 50 \cdot I_{(2\times2)}, \quad N = 25\]
 
-\noindent where the cost function \(J\) is a weighted sum of the deviation from the goal state and the control inputs:
-\[\sum_{k=0}^{N-1} \left( \| Q (x[t] - x_{goal}) \| + \| R u[t] \| \right) + p \| x[N] - x_{goal} \|\]
+\noindent where the cost function \(C\) is a weighted sum of the deviation from the goal state \(x_{goal}\) and each input \(u[t]\):
+\[\sum_{k=0}^{N-1} \left( \| Q (x[t] - x_{goal}) \| + \| R \cdot u[t] \| \right) + p \| x[N] - x_{goal} \|\]
 
 \noindent where \(p\) is a large penalty on the terminal state \(x[N]\) to encourage approaching \(x_{goal}\).
-The problem is thus formulated as minimizing \(J\) subject to the above constraints for (\(t = 0, 1, \ldots, N-1\)). This definition allows for an efficient computation of the optimal trajectory, avoiding obstacles while minimizing the cost function.
+The problem is formulated as minimizing \(C\) subject to the above constraints for (\(t = 0,\; \Delta,\; \ldots,\; \Delta(N-1)\)). This definition allows for an efficient computation of the optimal trajectory, avoiding obstacles while minimizing the cost function.
 
-\section{III. PROPOSED METHODS}
+\section{III. PROPOSED METHOD}
 
-Aenean feugiat pellentesque venenatis. Sed faucibus tristique tortor vel ultrices. Donec consequat tellus sapien. Nam bibendum urna mauris, eget sagittis justo gravida vel. Mauris nisi lacus, malesuada sit amet neque ut, venenatis tempor orci. Curabitur feugiat sagittis molestie. Duis euismod arcu vitae quam scelerisque facilisis. Praesent volutpat eleifend tortor, in malesuada dui egestas id. Donec finibus ac risus sed pellentesque. Donec malesuada non magna nec feugiat. Mauris eget nibh nec orci congue porttitor vitae eu erat. Sed commodo ipsum ipsum, in elementum neque gravida euismod. Cras mi lacus, pulvinar ut sapien ut, rutrum sagittis dui. Donec non est a metus varius finibus. Pellentesque rutrum pellentesque ligula, vitae accumsan nulla hendrerit ut.
+\quad However, the motion planning problem faced computational challenges. While our solutions were effective in simulations, the real-time applications proved impractical. The average computation time for solving the full problem naively was 0.2 seconds, but this could escalate to as much as 2.3 seconds in scenarios involving complex obstacles (Table 1). This delay was critical; by the time the solution was computed, the car had already moved beyond the planned trajectory, often resulting in crashes. This highlighted the need for a more efficient solution suitable for real-world applications.
 
-Aenean porttitor eros non pharetra congue. Proin in odio in dolor luctus auctor ac et mi. Etiam euismod mi sed lectus fringilla pretium. Phasellus tristique maximus lectus et sodales. Mauris feugiat ligula quis semper luctus. Nam sit amet felis sed leo fermentum aliquet. Mauris arcu dui, posuere id sem eget, cursus pulvinar mi. Donec nec lacus non lectus fermentum scelerisque et at nibh. Sed tristique, metus ac vestibulum porta, tortor lectus placerat lorem, et convallis tellus dolor eget ante. Pellentesque dui ligula, hendrerit a purus et, volutpat tempor lectus. Mauris nec purus nec mauris rhoncus pellentesque. Quisque quis diam sed est lacinia congue. Donec magna est, hendrerit sed metus vel, accumsan rutrum nibh.
+To address these challenges, we shifted our focus to leveraging neural networks. Our strategy involved training a neural network to predict the binary variables essential for solving the full problem. Traditionally, these variables \(b\_l_{sol}, b\_u_{sol}\) were obtained by solving the complete \texttt{cvxpy} problem. However, in our novel approach, we introduced these variables as parameters into a relaxed \texttt{cvxpy} problem. This method, which we refer to as the 'Model' method, was hypothesized to be significantly faster than the 'Naive' full problem method, thus reducing computational delays.
 
-Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Etiam cursus lectus purus, tempus iaculis quam dictum tristique. Nam interdum sapien nec tempor mattis. Quisque id sapien nisi. Mauris vehicula ornare eros vel efficitur. Nulla consectetur, turpis quis fringilla tincidunt, mi neque iaculis lectus, vel commodo elit odio non ex. Duis facilisis, purus ac viverra iaculis, turpis lectus ultrices ante, ac vestibulum ligula magna in libero. Etiam tristique maximus lacinia. Vestibulum hendrerit, lacus malesuada laoreet blandit, sapien velit sollicitudin nunc, eu porttitor urna ligula at lorem. Aliquam faucibus eros in fermentum venenatis. Fusce consectetur congue pellentesque. Suspendisse at nisi sit amet est porttitor cursus. Cras placerat faucibus nunc, a laoreet justo dignissim sit amet.
+Our model, developed using PyTorch, was designed to handle 24 input dimensions. These included four values representing the vehicle's state, \(x\), and 20 values from the vehicle's detected obstacles (comprising ten values each from five \(obs_l\) and five \(obs_s\) tuples). The output of the model consisted of 500 dimensions, corresponding to the binary variables in \(b\_l_{sol}, b\_u_{sol}\), calculated as five obstacles times a horizon of N, resulting in 25 values for both x and y coordinates. 
 
-Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Etiam cursus lectus purus, tempus iaculis quam dictum tristique. Nam interdum sapien nec tempor mattis. Quisque id sapien nisi. Mauris vehicula ornare eros vel efficitur. Nulla consectetur, turpis quis fringilla tincidunt, mi neque iaculis lectus, vel commodo elit odio non ex. Duis facilisis, purus ac viverra iaculis, turpis lectus ultrices ante, ac vestibulum ligula magna in libero. Etiam tristique maximus lacinia. Vestibulum hendrerit, lacus malesuada laoreet blandit, sapien velit sollicitudin nunc, eu porttitor urna ligula at lorem. Aliquam faucibus eros in fermentum venenatis. Fusce consectetur congue pellentesque. Suspendisse at nisi sit amet est porttitor cursus. Cras placerat faucibus nunc, a laoreet justo dignissim sit amet.
+\textit{Side note: A notable aspect of our model is its ability to handle scenarios where fewer than five obstacles are detected. In such cases, we appended dummy obstacles with zero width at the origin to maintain consistent input dimensions.}
 
-%------------------------------------------------
+The model is a binary classification network with eight linear hidden layers, each comprising 512 neurons. After the input layer, we applied \texttt{torch.nn. BatchNorm1D} normalization. Our initial experiments included \texttt{torch.nn.Dropout(0.1)} after each hidden layer, but this was later removed due to a decline in model performance. We experimented with both relu and leaky relu activation functions, ultimately selecting leaky relu for its superior performance. 
 
-\section{IV. RESULTS \& ANALYSIS}
+The inclusion of each feature in our model was justified through experimental validation. The exact numbers of layers and neurons were determined to optimize the balance between computational efficiency and the model's ability to accurately predict binary variables.
 
-\begin{figure}
-	\includegraphics[width=\linewidth]{graph.png}
-	\caption{Solve times vs distance from origin for both methods.}
-\end{figure}
+The model was trained over 256 epochs with a batch size of 2048, using a dataset comprising over \(1.3 \times 10^5\) values. The initial learning rate was set at 0.001. We utilized \texttt{TensorDataset} from \texttt{torch.utils.data} for organizing our data and labels and divided our dataset into an 80\% training and 20\% validation split using \texttt{random\_split}. The \texttt{DataLoader} was employed for handling both training and validation datasets.
+
+In terms of optimizers, we compared the performance of \texttt{optim.Adam} and \texttt{optim.SGD}, eventually choosing Adam due to its superior results. Our loss function was initially \texttt{nn.BCEWithLogitsLoss} during training, which was switched to \texttt{nn.BCELoss} (with a manual sigmoid) for evaluation. We also incorporated positive weighting in our loss function to give preference to 1s over 0s, which proved beneficial. The learning rate was adjusted by a factor of \(\frac{1}{10}\) upon stagnation using the \texttt{ReduceLROnPlateau} scheduler.
+
+The selection of each parameter, including the number of epochs, batch size, and learning rate, was based on extensive experimentation to achieve the best balance between training efficiency and model accuracy.
+
+\section{IV. EXPERIMENTAL SETUP}
 
 \begin{table}
-    \caption{Comparison of metrics between naive and model methods.}
+    \caption{Comparison of metrics from 1000 datapoints per method.}
     \centering
     \begin{tabular}{l r r}
         \toprule
@@ -161,17 +164,41 @@ Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculu
     \end{tabular}
 \end{table}
 
+\quad To construct a comprehensive dataset for training our model, we engaged in an extensive data collection process. This involved simulating the full motion planning problem over 1500 iterations, each with a randomly assigned starting state for the vehicle. For every timestep $\Delta$ in the range $0 \leq t < t_{\text{end}}$, the vehicle's current state $x$, detected obstacles (characterized by $\text{obs\_lower}$ and $\text{obs\_size}$), and the target state $x_{\text{goal}}$ were input into the simulation. The outputs from the simulation, $x_{\text{sol}}$ and $u_{\text{sol}}$, were then used to update the vehicle's state for the next timestep, following the kinematic equations:
+\begin{align*}
+    p_{x, y}[1] &= p_{x, y}[0] + v_{x, y}[0] \Delta + \frac{1}{2} (a_{x, y}[0] \cdot \Delta^2) \\
+    v_{x, y}[1] &= v_{x, y}[0] + a_{x, y}[0] \Delta
+\end{align*}
+Additionally, the binary variables $\text{bl\_sol}$ and $\text{bu\_sol}$ were recorded in the dataset, paired with corresponding values of $x$ and \(obs\_lower, obs\_size\) as keys.
+
+The dataset, structured as a dictionary of key-value pairs, required minimal preprocessing. The only steps taken were batch normalization and the division of the dataset into training and validation sets, as detailed in Section III of this paper. This streamlined approach ensured that the data was ready for model training without the need for extensive cleaning or modification.
+
+In assessing the performance of our model, we employed a rigorous evaluation methodology. During the training loop, the model was saved at the end of each epoch if its validation loss was lower than that of all previous epochs. Our target was to achieve a validation loss of 2.5\% or lower, and our best-performing model attained a loss of just 2.2\%. Performance was further measured by inputting data from the dataset into the model and comparing the number of element-wise discrepancies between the model’s output and the expected label. On average, our model exhibited 1.2 discrepancies out of 250 labels for $\text{bl\_sol}$, and 3.6 out of 250 for $\text{bu\_sol}$, resulting in a total of 4.8 discrepancies out of 500 for both labels combined. This translates to an impressive accuracy rate of 99.04\%.
+
+For benchmarking purposes, we compared our neural network model against the full motion planning problem, treated as our baseline algorithm. The primary benchmark was to surpass the baseline in terms of solve time at each timestep by at least a factor of 10. The average solve time for the baseline (Naive) solution was 0.2 seconds, while our model (Model) solution averaged 0.006 seconds, as shown in Table 1 and Figure 2. This indicates that our model solution reduces solve time by a factor of 30 or more, significantly outperforming the baseline.
+
+The implementation of our model was carried out on a physical vehicle using the BARC platform, developed by the Model Predictive Control Lab. These 1/10 scale model electric cars are equipped with advanced sensors, including LiDar and high-resolution cameras. They are capable of streaming data to an external computing unit for real-time offboard computation. The vehicle operates using the Robotic Operating System, facilitating efficient data handling and model integration. This setup provided a realistic and robust platform for testing and refining our autonomous car's obstacle avoidance and racing capabilities.
+
+\section{V. RESULTS \& ANALYSIS}
+
+\begin{figure}
+	\includegraphics[width=\linewidth]{graph.png}
+	\caption{Solve times vs distance from origin for both methods.}
+\end{figure}
+
 Suspendisse potenti. Vivamus suscipit dapibus metus. Proin auctor iaculis ex, id fermentum lectus dapibus tristique. Nullam maximus eros eget leo pretium dapibus. Nunc in auctor erat, id interdum risus. Suspendisse aliquet vehicula accumsan. In vestibulum efficitur dictum. Sed ultrices, libero nec fringilla feugiat, elit massa auctor ligula, vehicula tempor ligula felis in lectus. Suspendisse sem dui, pharetra ut sodales eu, suscipit sit amet felis. Donec pretium viverra ante, ac pulvinar eros. Suspendisse gravida consectetur urna. Pellentesque vitae leo porta, imperdiet eros eget, posuere sem. Praesent eget leo efficitur odio bibendum condimentum sit amet vel ex. Nunc maximus quam orci, quis pulvinar nibh eleifend ac. Quisque consequat lacus magna, eu posuere tellus iaculis ac. Sed vitae tortor tincidunt ante sagittis iaculis.
 
 Nullam mollis tellus lorem, sed congue ipsum euismod a. Donec pulvinar neque sed ligula ornare sodales. Nulla sagittis vel lectus nec laoreet. Nulla volutpat malesuada turpis at ultricies. Ut luctus velit odio, sagittis volutpat erat aliquet vel. Donec ac neque eget neque volutpat mollis. Vestibulum viverra ligula et sapien bibendum, vel vulputate ex euismod. Curabitur nec velit velit. Aliquam vulputate lorem elit, id tempus nisl finibus sit amet. Curabitur ex turpis, consequat at lectus id, imperdiet molestie augue. Curabitur eu eros molestie purus commodo hendrerit. Quisque auctor ipsum nec mauris malesuada, non fringilla nibh viverra. Quisque gravida, metus quis semper pulvinar, dolor nisl suscipit leo, vestibulum volutpat ante justo ultrices diam. Sed id facilisis turpis, et aliquet eros.
 
-\section{V. CONCLUSION}
+\section{VI. CONCLUSION}
 
-Duis venenatis eget lectus a aliquet. Integer vulputate ante suscipit felis feugiat rutrum. Aliquam eget dolor eu augue elementum ornare. Nulla fringilla interdum volutpat. Sed tincidunt, neque quis imperdiet hendrerit, turpis sapien ornare justo, ac blandit felis sem quis diam. Proin luctus urna sit amet felis tincidunt, sed congue nunc pellentesque. Ut faucibus a magna faucibus finibus. Etiam id mi euismod, auctor nisi eget, pretium metus. Proin tincidunt interdum mi non interdum. Donec semper luctus dolor at elementum. Aenean eu congue tortor, sed hendrerit magna. Quisque a dolor ante. Mauris semper id urna id gravida. Vestibulum mi tortor, finibus eu felis in, vehicula aliquam mi.
+\quad Our neural network model, adept at processing minimal input data for high-speed autonomous vehicle operations, holds promise for real-world applications in autonomous racing, advanced driver-assistance systems, and beyond. Its efficiency in high-speed, limited visibility environments marks a significant advancement in autonomous vehicle technology.
 
-Aliquam arcu turpis, ultrices sed luctus ac, vehicula id metus. Morbi eu feugiat velit, et tempus augue. Proin ac mattis tortor. Donec tincidunt, ante rhoncus luctus semper, arcu lorem lobortis justo, nec convallis ante quam quis lectus. Aenean tincidunt sodales massa, et hendrerit tellus mattis ac. Sed non pretium nibh. 
+Despite its strengths, the model's current design is specific to the BARC platform and may not directly translate to other systems. Its performance in varied environmental conditions also requires further exploration, highlighting scalability challenges. The model does not yet address the adaptability to unpredictable environmental changes or real-time learning from new obstacles, which remains a key challenge in autonomous navigation.
 
-Donec cursus maximus luctus. Vivamus lobortis eros et massa porta porttitor. Nam vitae suscipit mi. Pellentesque ex tellus, iaculis vel libero at, cursus pretium sapien. Curabitur accumsan velit sit amet nulla lobortis, ut pretium ex aliquam. Proin eget volutpat orci. Morbi eu aliquet turpis. Vivamus molestie urna quis tempor tristique. Proin hendrerit sem nec tempor sollicitudin.
+This research pushes the boundaries of neural network applications in time-sensitive scenarios, setting a new benchmark for efficiency and accuracy in machine learning for autonomous vehicles. It contributes significantly to the field, demonstrating the potential of neural networks in complex, real-world tasks.
+
+Future work should focus on enhancing the model's adaptability to diverse environments and integrating reinforcement learning for real-time obstacle adaptation. Expanding its application to different autonomous platforms will also be a crucial step in broadening its impact across various sectors.
 
 %%% REFERENCES %%%
 
