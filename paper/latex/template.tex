@@ -18,9 +18,6 @@
 \title{Leveraging Neural Networks for Efficient Obstacle\\Avoidance and Racing an Autonomous Car}
 % Article title, use manual lines breaks (\\) to beautify the layout
 
-% Authors are listed in a comma-separated list with superscript numbers indicating affiliations
-% \thanks{} is used for any text that should be placed in a footnote on the first page, such as the corresponding author's email, journal acceptance dates, a copyright/license notice, keywords, etc
-
 \author{Yanxiang Zhang, Chaarvi Goel, Siddharth H. Nair, Francesco Borrelli
 \thanks{\;Y. Zhang and C. Goel are with the Department of Electrical Engineering and Computer Sciences, S. H. Nair is with the Department of Mechanical Engineering, University of California, Berkeley, Berkeley, CA 94701, USA \texttt{\{joshzhang, chaarvigoel, siddharth\_nair, fborrelli\}@berkeley.edu}}}
 
@@ -149,7 +146,7 @@ The selection of each parameter, including the number of epochs, batch size, and
 \section{IV. EXPERIMENTAL SETUP}
 
 \begin{table}
-    \caption{Comparison of metrics from 1000 datapoints per method.}
+    \caption{Comparison of metrics; 1000 iterations per method.}
     \centering
     \begin{tabular}{l r r}
         \toprule
@@ -164,20 +161,22 @@ The selection of each parameter, including the number of epochs, batch size, and
     \end{tabular}
 \end{table}
 
-\quad To construct a comprehensive dataset for training our model, we engaged in an extensive data collection process. This involved simulating the full motion planning problem over 1500 iterations, each with a randomly assigned starting state for the vehicle. For every timestep $\Delta$ in the range $0 \leq t < t_{\text{end}}$, the vehicle's current state $x$, detected obstacles (characterized by $\text{obs\_lower}$ and $\text{obs\_size}$), and the target state $x_{\text{goal}}$ were input into the simulation. The outputs from the simulation, $x_{\text{sol}}$ and $u_{\text{sol}}$, were then used to update the vehicle's state for the next timestep, following the kinematic equations:
+\quad To construct a comprehensive dataset for training our model, we engaged in an extensive data collection process. This involved simulating the full motion planning problem over 1500 iterations, each with a randomly assigned starting state for the vehicle. For every timestep $\Delta$ in the range $0 \leq t < t_{end}$, the vehicle's current state $x$, detected obstacles (characterized by $obs\_lower$ and $obs\_size$), and the target state $x_{goal}$ were input into the simulation. The outputs from the simulation, $x_{sol}$ and $u_{sol}$, were then used to update the vehicle's state for the next timestep, following the kinematic equations:
 \begin{align*}
     p_{x, y}[1] &= p_{x, y}[0] + v_{x, y}[0] \Delta + \frac{1}{2} (a_{x, y}[0] \cdot \Delta^2) \\
     v_{x, y}[1] &= v_{x, y}[0] + a_{x, y}[0] \Delta
 \end{align*}
-Additionally, the binary variables $\text{bl\_sol}$ and $\text{bu\_sol}$ were recorded in the dataset, paired with corresponding values of $x$ and \(obs\_lower, obs\_size\) as keys.
+Additionally, the binary variables $b\_l_{sol}$ and $b\_u_{sol}$ were recorded in the dataset, paired with corresponding values of $x$ and $obs\_lower,\; obs\_size$ as keys.
 
-The dataset, structured as a dictionary of key-value pairs, required minimal preprocessing. The only steps taken were batch normalization and the division of the dataset into training and validation sets, as detailed in Section III of this paper. This streamlined approach ensured that the data was ready for model training without the need for extensive cleaning or modification.
+The dataset, structured as a dictionary of key-value pairs, required minimal preprocessing. The only steps taken were batch normalization and the division of the dataset into training and validation sets, as detailed in Section III above. This streamlined approach ensured that the data was ready for model training without the need for extensive cleaning or modification.
 
-In assessing the performance of our model, we employed a rigorous evaluation methodology. During the training loop, the model was saved at the end of each epoch if its validation loss was lower than that of all previous epochs. Our target was to achieve a validation loss of 2.5\% or lower, and our best-performing model attained a loss of just 2.2\%. Performance was further measured by inputting data from the dataset into the model and comparing the number of element-wise discrepancies between the model’s output and the expected label. On average, our model exhibited 1.2 discrepancies out of 250 labels for $\text{bl\_sol}$, and 3.6 out of 250 for $\text{bu\_sol}$, resulting in a total of 4.8 discrepancies out of 500 for both labels combined. This translates to an impressive accuracy rate of 99.04\%.
+In assessing the performance of our model, we employed a rigorous evaluation methodology. During the training loop, the model was saved at the end of each epoch if its validation loss was lower than that of all previous epochs. Our target was to achieve a loss of 2.5\% or lower, and our best-performing model, as described in Section III, attained a loss of just 2.2\%. 
 
-For benchmarking purposes, we compared our neural network model against the full motion planning problem, treated as our baseline algorithm. The primary benchmark was to surpass the baseline in terms of solve time at each timestep by at least a factor of 10. The average solve time for the baseline (Naive) solution was 0.2 seconds, while our model (Model) solution averaged 0.006 seconds, as shown in Table 1 and Figure 2. This indicates that our model solution reduces solve time by a factor of 30 or more, significantly outperforming the baseline.
+For benchmarking purposes, we compared our model against the full motion planning problem, treated as our Naive algorithm. The primary benchmark was to surpass the Naive baseline in terms of solve time at each timestep by at least a factor of 10. The average solve time for the Naive solution (across 1000 iterations of the problem) was about 0.2 seconds, as described in Table 1 and visualized in Figure 2.
 
-The implementation of our model was carried out on a physical vehicle using the BARC platform, developed by the Model Predictive Control Lab. These 1/10 scale model electric cars are equipped with advanced sensors, including LiDar and high-resolution cameras. They are capable of streaming data to an external computing unit for real-time offboard computation. The vehicle operates using the Robotic Operating System, facilitating efficient data handling and model integration. This setup provided a realistic and robust platform for testing and refining our autonomous car's obstacle avoidance and racing capabilities.
+The implementation of our model was carried out on a physical vehicle using the BARC platform. These \(\frac{1}{10}\) scale model electric cars are equipped with advanced sensors, including LiDar and high-resolution cameras. They are capable of streaming data to an external computing unit for real-time offboard computation. The vehicle operates using the Robotic Operating System, facilitating efficient data handling and model integration. This setup provided a realistic and robust platform for testing and refining our autonomous car's obstacle avoidance and racing capabilities.
+
+\textit{View the source code for this project and demo videos of the BARC at} \texttt{\href{https://github.com/shn66/L4MIMPC_urap}{github.com/shn66/L4MIMPC\_urap}}.
 
 \section{V. RESULTS \& ANALYSIS}
 
@@ -186,9 +185,17 @@ The implementation of our model was carried out on a physical vehicle using the 
 	\caption{Solve times vs distance from origin for both methods.}
 \end{figure}
 
-Suspendisse potenti. Vivamus suscipit dapibus metus. Proin auctor iaculis ex, id fermentum lectus dapibus tristique. Nullam maximus eros eget leo pretium dapibus. Nunc in auctor erat, id interdum risus. Suspendisse aliquet vehicula accumsan. In vestibulum efficitur dictum. Sed ultrices, libero nec fringilla feugiat, elit massa auctor ligula, vehicula tempor ligula felis in lectus. Suspendisse sem dui, pharetra ut sodales eu, suscipit sit amet felis. Donec pretium viverra ante, ac pulvinar eros. Suspendisse gravida consectetur urna. Pellentesque vitae leo porta, imperdiet eros eget, posuere sem. Praesent eget leo efficitur odio bibendum condimentum sit amet vel ex. Nunc maximus quam orci, quis pulvinar nibh eleifend ac. Quisque consequat lacus magna, eu posuere tellus iaculis ac. Sed vitae tortor tincidunt ante sagittis iaculis.
+\quad Performance was further measured by inputting data from the dataset into the model and comparing the number of element-wise discrepancies between the model’s output and the expected binary variables. On average, across all points in the dataset, our model exhibited 1.2 discrepancies out of 250 variables for $bl\_sol$, and 3.6 out of 250 for $bu\_sol$, resulting in a total of 4.8 discrepancies out of 500 for both variables combined. This translates to an impressive accuracy rate of 99.04\%, which proved accurate enough for the model to solve the problem independently with a similar success rate.
 
-Nullam mollis tellus lorem, sed congue ipsum euismod a. Donec pulvinar neque sed ligula ornare sodales. Nulla sagittis vel lectus nec laoreet. Nulla volutpat malesuada turpis at ultricies. Ut luctus velit odio, sagittis volutpat erat aliquet vel. Donec ac neque eget neque volutpat mollis. Vestibulum viverra ligula et sapien bibendum, vel vulputate ex euismod. Curabitur nec velit velit. Aliquam vulputate lorem elit, id tempus nisl finibus sit amet. Curabitur ex turpis, consequat at lectus id, imperdiet molestie augue. Curabitur eu eros molestie purus commodo hendrerit. Quisque auctor ipsum nec mauris malesuada, non fringilla nibh viverra. Quisque gravida, metus quis semper pulvinar, dolor nisl suscipit leo, vestibulum volutpat ante justo ultrices diam. Sed id facilisis turpis, et aliquet eros.
+Additionally, our Model solution performed significantly better than the benchmark in terms of solve time, averaging 0.006 seconds as shown in Table 1 and Figure 2. Compared to the Naive solution's average of 0.2 seconds, our Model solution reduces solve time by a factor of more than 30, significantly outperforming our baseline and our expectations of a tenfold reduction.
+
+To visualize the Model solution’s improvement over the full problem, we may analyze individual sections of our graphs. A general trend of the Naive solution is that solve times are significantly greater when the vehicle must navigate through tight corridors or around large obstacles, forcing the planned trajectory to calculate a curve instead of simply going straight.
+
+For instance, when the distance from the origin in Figure 2, and by approximation, the distance along the x-axis in Figure 1, is between 0 and 1 meters. A large peak occurs around a tight squeeze at 3 meters. On the other hand, the Model solution successfully reduces those solve times by an order of magnitude as shown in Figure 2, stabilizing around 0.05 seconds regardless of obstacle locations or the vehicle's whereabouts.
+
+In a part-by-part analysis, the model's performance was evaluated under different training conditions and environmental setups. Notably, the model demonstrated robust performance when trained on a large dataset comprising random simulated starting states. However, it exhibited even more refined and accurate behavior when trained on a slightly smaller dataset where the starting points closely mirrored those we chose in the physical testing environment. This suggests that the model's learning is significantly enhanced by training on data that closely resembles real-world scenarios. Furthermore, the model's performance was observed to be superior in environments with fewer obstacles and more constrained settings. This indicates that while the model is capable of handling complex scenarios, its efficiency and accuracy are maximized in simpler and predictable environments.
+
+Our analysis and comparison of the model's performance with baseline and state-of-the-art methods reveal several key insights. Firstly, the model's high accuracy rate of 99.04\% in solving the problem independently is a testament to its robustness and reliability. This level of accuracy is not only significantly higher than that of traditional methods, but also positions our model as a competitive alternative in the field of autonomous vehicle navigation. Additionally, the dramatic reduction in solve time by a factor of over 30 compared to the Naive solution underscores the efficiency of our model. Coupled with the model's ability to maintain stable solve times regardless of environmental complexity, as evidenced in our qualitative analysis, it holds great potential for real-world applications in autonomous car racing and obstacle avoidance. A part-by-part analysis further enriches our understanding of the model's adaptability and efficiency, particularly in scenarios that closely resemble real-world conditions.
 
 \section{VI. CONCLUSION}
 
@@ -202,5 +209,14 @@ Future work should focus on enhancing the model's adaptability to diverse enviro
 
 %%% REFERENCES %%%
 
-\printbibliography % Output the bibliography
+% TODO: Proofread the Abstract and all the Sections and revise
+% anything that's confusing; ALSO: google scholar like 12 plus 
+% references to sprinkle in the paper, the intro in particular
+
+\cite{citation1} % Cite each source like this for them
+\cite{citation2} % to appear in the references section
+
+\printbibliography % See {sample.bib} for the list of sources
+% Other stuff like the cls file and formatting should be good
+% The math-heavy stuff in Section II we can give to Sid later
 \end{document}
