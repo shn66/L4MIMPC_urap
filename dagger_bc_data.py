@@ -8,7 +8,6 @@ import torch as th
 import torch.nn.functional as fn
 import re
 
-
 TOL = 0.2
 LIM = 0.01
 ITERS = 100
@@ -203,9 +202,6 @@ def dagger_problem(num_iters, plot_sol):
             file = open(f"dagger/sol_dagger{iter}.pkl", "wb")
             pickle.dump(world.solutions, file)
             world.solutions = []
-
-
-
 
 
 if __name__ == "__main__":
